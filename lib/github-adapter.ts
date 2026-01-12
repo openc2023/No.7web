@@ -135,8 +135,17 @@ export class GitHubAdapter {
   }
 
   async saveFile(path: string, content: any, message: string, sha?: string): Promise<string> {
-    const contentString = JSON.stringify(content, null, 2);
-    const contentBase64 = btoa(unescape(encodeURIComponent(contentString)));
+    const isBinary = typeof content !== 'string' && !(content instanceof Object);
+    let contentBase64: string;
+
+    if (typeof content === 'string' && content.startsWith('data:')) {
+        contentBase64 = content.split(',')[1];
+    } else if (typeof content === 'string') {
+        contentBase64 = btoa(unescape(encodeURIComponent(content)));
+    } else {
+        contentBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(content, null, 2))));
+    }
+
     const body = { message, content: contentBase64, sha, branch: this.config.branch };
 
     const res = await fetch(`${this.baseUrl}/repos/${this.config.owner}/${this.config.repo}/contents/${path}`, {
@@ -151,6 +160,13 @@ export class GitHubAdapter {
     }
     const data = await res.json();
     return data.content.sha;
+  }
+
+  async uploadAsset(dataUrl: string, filename: string): Promise<string> {
+      const path = `assets/${filename}`;
+      await this.saveFile(path, dataUrl, `Upload asset: ${filename}`);
+      // Return raw github user content URL for immediate use
+      return `https://raw.githubusercontent.com/${this.config.owner}/${this.config.repo}/${this.config.branch}/${path}`;
   }
 
   async savePage(page: Page, message: string = 'Update page'): Promise<{ newSha: string }> {

@@ -13,7 +13,7 @@ import {
   X,
   Trash2
 } from 'lucide-react';
-import { MenuNode, Block } from '../types';
+import { MenuNode, Block, Page } from '../types';
 
 interface StructureTreeProps {
   menu: MenuNode[];

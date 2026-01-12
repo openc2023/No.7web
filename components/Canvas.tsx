@@ -20,500 +20,166 @@ interface CanvasProps {
   onUpdateBlockProps: (id: string, props: any) => void;
   componentDefs: ComponentDefinition[];
   siteSettings: SiteSettings;
-  // Context Props for dynamic blocks
   menu: MenuNode[];
   pages: Record<string, Page>;
   activePageId: string;
   onSelectPage: (id: string) => void;
 }
 
-// Extracted FrameWrapper to prevent re-mounting on every render
 const FrameWrapper: React.FC<{ children: React.ReactNode; viewDevice: 'desktop' | 'tablet' | 'mobile' }> = ({ children, viewDevice }) => {
      if (viewDevice === 'desktop') return <>{children}</>;
-     
      return (
-        <div className={`
-             relative bg-black rounded-[40px] shadow-2xl border-4 border-zinc-800 ring-1 ring-zinc-950/50
-             ${viewDevice === 'mobile' ? 'p-3' : 'p-4'}
-             h-full flex flex-col
-        `}>
-            {/* Notch */}
+        <div className={`relative bg-black rounded-[40px] shadow-2xl border-4 border-zinc-800 ring-1 ring-zinc-950/50 ${viewDevice === 'mobile' ? 'p-3' : 'p-4'} h-full flex flex-col`}>
             <div className="absolute top-0 left-1/2 -translate-x-1/2 h-6 w-32 bg-black rounded-b-xl z-50 pointer-events-none"></div>
-            <div className="bg-zinc-950 rounded-[32px] overflow-hidden flex-1 w-full relative custom-scrollbar overflow-y-auto">
-                {children}
-            </div>
+            <div className="bg-zinc-950 rounded-[32px] overflow-hidden flex-1 w-full relative custom-scrollbar overflow-y-auto">{children}</div>
         </div>
      );
 };
 
 export const Canvas: React.FC<CanvasProps> = ({ 
-  blocks, 
-  viewDevice, 
-  selectedBlockId, 
-  onSelectBlock,
-  onDeleteBlock,
-  onDuplicateBlock,
-  onMoveBlock,
-  onLayerBlock,
-  onReorderBlock,
-  onUpdateBlockProps,
-  componentDefs,
-  siteSettings,
-  menu,
-  pages,
-  activePageId,
-  onSelectPage
+  blocks, viewDevice, selectedBlockId, onSelectBlock, onDeleteBlock, onDuplicateBlock,
+  onMoveBlock, onLayerBlock, onReorderBlock, onUpdateBlockProps, siteSettings,
+  menu, pages, activePageId, onSelectPage
 }) => {
-  
   const canvasRef = useRef<HTMLDivElement>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  
-  // Store the offset of the mouse relative to the block's top-left corner
   const dragOffset = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
-  
-  // Shadow now tracks validity
   const [shadow, setShadow] = useState<{col: number, row: number, w: number, h: number, isValid: boolean} | null>(null);
   
-  const [cellSize, setCellSize] = useState(140);
-  const [gapSize, setGapSize] = useState(16);
+  const cellSize = useMemo(() => {
+      if (viewDevice === 'mobile') return parseInt(siteSettings.theme['--mobile-cell-size'] || '100');
+      if (viewDevice === 'tablet') return parseInt(siteSettings.theme['--tablet-cell-size'] || '115');
+      return parseInt(siteSettings.theme['--cell-size'] || '140');
+  }, [siteSettings.theme, viewDevice]);
 
-  // --- Device Configuration ---
-  const maxCols = useMemo(() => {
-      switch(viewDevice) {
-          case 'mobile': return 4;
-          case 'tablet': return 8;
-          default: return 12;
-      }
-  }, [viewDevice]);
+  const gapSize = useMemo(() => {
+      if (viewDevice === 'mobile') return parseInt(siteSettings.theme['--mobile-gap'] || '10');
+      if (viewDevice === 'tablet') return parseInt(siteSettings.theme['--tablet-gap'] || '12');
+      return parseInt(siteSettings.theme['--gap'] || '16');
+  }, [siteSettings.theme, viewDevice]);
 
-  const widthClass = useMemo(() => {
-     return viewDevice === 'mobile' ? 'w-[375px]' : 
-            viewDevice === 'tablet' ? 'w-[768px]' : 
-            'w-full max-w-6xl';
-  }, [viewDevice]);
+  const maxCols = viewDevice === 'mobile' ? 4 : viewDevice === 'tablet' ? 8 : 12;
 
-  // --- Helper: Get Device Specific Props (with Smart Scaling) ---
   const getDeviceProps = (props: any, device: 'desktop' | 'tablet' | 'mobile') => {
       const prefix = device === 'desktop' ? '' : `${device}_`;
       
-      // 1. Try to get explicit device prop
-      let rawColSpan = props[`${prefix}colSpan`];
+      // Fallback chain: Device-Specific -> Global Prop -> Default
+      const colSpan = props[`${prefix}colSpan`] ?? props.colSpan ?? 4;
+      const rowSpan = props[`${prefix}rowSpan`] ?? props.rowSpan ?? 4;
+      const colStart = props[`${prefix}colStart`] ?? props.colStart;
+      const rowStart = props[`${prefix}rowStart`] ?? props.rowStart;
       
-      // 2. If undefined, Smart Scale from Desktop props
-      if (rawColSpan === undefined) {
-          const desktopSpan = props.colSpan || 4;
-          if (device === 'mobile') {
-              // Mobile Logic (Max 4):
-              // Desktop 1-3 (Small) -> Mobile 2 (Half)
-              // Desktop 4+ (Medium/Large) -> Mobile 4 (Full)
-              rawColSpan = desktopSpan <= 3 ? 2 : 4;
-          } else if (device === 'tablet') {
-              // Tablet Logic (Max 8):
-              // Scale by 2/3 roughly (8/12)
-              // 12 -> 8, 6 -> 4, 3 -> 2
-              rawColSpan = Math.max(1, Math.round(desktopSpan * (8/12)));
-          } else {
-              rawColSpan = desktopSpan;
-          }
-      }
-      
-      const rawRowSpan = props[`${prefix}rowSpan`] || props.rowSpan || 1;
-      
-      const deviceMax = device === 'mobile' ? 4 : device === 'tablet' ? 8 : 12;
-      const colSpan = Math.min(Number(rawColSpan), deviceMax);
-      const rowSpan = Number(rawRowSpan);
-      
-      // Start is optional. If undefined, it means "auto flow"
-      const colStart = props[`${prefix}colStart`]; 
-      const rowStart = props[`${prefix}rowStart`];
-
-      return { colSpan, rowSpan, colStart, rowStart };
-  };
-
-  // --- Collision Detection ---
-  const checkCollision = (col: number, row: number, w: number, h: number, ignoreId: string) => {
-      return blocks.some(b => {
-          if (b.id === ignoreId) return false;
-          const { colSpan, rowSpan, colStart, rowStart } = getDeviceProps(b.props, viewDevice);
-          
-          // Only collide with fixed blocks to prevent overlapping
-          // If a block is flowing (no fixed start), we assume it will flow around and doesn't "occupy" a fixed slot in a way that blocks us.
-          if (colStart === undefined || rowStart === undefined) return false;
-          
-          return (
-              col < colStart + colSpan &&
-              col + w > colStart &&
-              row < rowStart + rowSpan &&
-              row + h > rowStart
-          );
-      });
-  };
-
-  // --- Visual Ordering for Auto-Flow ---
-  // On Desktop, order is defined by grid coords. On Mobile/Tablet Auto-Flow, it's defined by Array order.
-  // We sort the blocks array based on desktop coordinates to ensure they flow logically on mobile.
-  const displayBlocks = useMemo(() => {
-      if (viewDevice === 'desktop') return blocks;
-      
-      // Shallow copy and sort
-      return [...blocks].sort((a, b) => {
-          // Priority 1: Has explicit mobile/tablet position?
-          const prefix = `${viewDevice}_`;
-          const aHasPos = a.props[`${prefix}colStart`] !== undefined;
-          const bHasPos = b.props[`${prefix}colStart`] !== undefined;
-          
-          if (aHasPos && !bHasPos) return -1;
-          if (!aHasPos && bHasPos) return 1;
-          if (aHasPos && bHasPos) {
-              // Both have custom positions, sort by custom row/col
-              const rowDiff = (a.props[`${prefix}rowStart`] || 0) - (b.props[`${prefix}rowStart`] || 0);
-              if (rowDiff !== 0) return rowDiff;
-              return (a.props[`${prefix}colStart`] || 0) - (b.props[`${prefix}colStart`] || 0);
-          }
-
-          // Priority 2: Fallback to Desktop visual order (Row then Col)
-          const aRow = a.props.rowStart || 999;
-          const bRow = b.props.rowStart || 999;
-          if (aRow !== bRow) return aRow - bRow;
-          
-          const aCol = a.props.colStart || 999;
-          const bCol = b.props.colStart || 999;
-          return aCol - bCol;
-      });
-  }, [blocks, viewDevice]);
-
-
-  // --- Measure Cell Size ---
-  useEffect(() => {
-    const measureGrid = () => {
-        if (!canvasRef.current) return;
-        const gridElement = canvasRef.current.querySelector('.grid-container');
-        if (gridElement) {
-            const rect = gridElement.getBoundingClientRect();
-            const gap = 16;
-            setGapSize(gap);
-            // Calculate cell size based on current column count
-            const calculatedCellSize = (rect.width - ((maxCols - 1) * gap)) / maxCols;
-            setCellSize(calculatedCellSize);
-        }
-    };
-    measureGrid();
-    const resizeObserver = new ResizeObserver(() => measureGrid());
-    if (canvasRef.current) resizeObserver.observe(canvasRef.current);
-    return () => resizeObserver.disconnect();
-  }, [maxCols, viewDevice]); 
-
-  // --- Grid Generators ---
-  const getGridStyle = (type: string, props: any, isShadow = false) => {
-    // SPECIAL HANDLING FOR PAGE HEADER
-    if (type === 'page-header' && !isShadow) {
-       const pos = props.layoutPosition || 'top';
-       
-       if (viewDevice !== 'desktop') {
-           return { gridColumn: '1 / -1', gridRow: 'auto', order: -9999, marginBottom: '16px' }; 
-       }
-       
-       if (pos === 'left') {
-           return { gridColumn: '1 / span 3', gridRow: '1 / span 24', zIndex: 40 };
-       }
-       if (pos === 'right') {
-           return { gridColumn: '10 / span 3', gridRow: '1 / span 24', zIndex: 40 };
-       }
-       return { gridColumn: '1 / -1', gridRow: '1 / span 1', zIndex: 40 };
-    }
-
-    // Generic Block Handling
-    const { colSpan, rowSpan, colStart, rowStart } = getDeviceProps(props, viewDevice);
-
-    if (colStart && rowStart) {
-        // Explicit Positioning (Free Layout)
-        return {
-            gridColumn: `${colStart} / span ${colSpan}`,
-            gridRow: `${rowStart} / span ${rowSpan}`
-        };
-    } else {
-        // Auto Flow
-        return {
-            gridColumn: `span ${colSpan}`,
-            gridRow: `span ${rowSpan}`
-        };
-    }
-  };
-
-  // --- Drag & Reposition Logic ---
-  const handleDragStart = (e: React.DragEvent, id: string, props: any) => {
-    // 1. Set Transfer Data
-    e.dataTransfer.setData('text/plain', id);
-    e.dataTransfer.effectAllowed = 'move';
-    
-    // 2. Calculate Grab Offset
-    // This fixes the issue where blocks snap to the mouse position instead of maintaining relative position
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    dragOffset.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-    };
-
-    setDraggedId(id);
-    onSelectBlock(id);
+      return { 
+          colSpan: Math.min(Number(colSpan), maxCols), 
+          rowSpan: Number(rowSpan), 
+          colStart: colStart === 'auto' ? undefined : Number(colStart), 
+          rowStart: rowStart === 'auto' ? undefined : Number(rowStart)
+      };
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    
     if (!draggedId) return;
-
     const draggedBlock = blocks.find(b => b.id === draggedId);
-    if (!draggedBlock) return;
-    if (draggedBlock.type === 'page-header') return;
-
+    if (!draggedBlock || draggedBlock.type === 'page-header') return;
     const { colSpan: w, rowSpan: h } = getDeviceProps(draggedBlock.props, viewDevice);
-
-    const gridEl = canvasRef.current?.querySelector('.grid-container');
-    if (!gridEl) return;
-    
-    const rect = gridEl.getBoundingClientRect();
-    
-    // Calculate Position relative to grid, ADJUSTING FOR GRAB OFFSET
+    const rect = canvasRef.current?.querySelector('.grid-container')?.getBoundingClientRect();
+    if (!rect) return;
     const relX = e.clientX - rect.left - dragOffset.current.x;
     const relY = e.clientY - rect.top - dragOffset.current.y;
-    
     const step = cellSize + gapSize;
-    
-    // 1-based index with better rounding for magnetic feel
     let col = Math.round(relX / step) + 1;
     let row = Math.round(relY / step) + 1;
-    
-    // Clamp to boundaries
-    if (col < 1) col = 1;
-    if (col > maxCols - w + 1) col = maxCols - w + 1;
-    if (row < 1) row = 1;
-
-    // Check collision
-    const isColliding = checkCollision(col, row, w, h, draggedId);
-    
-    setShadow({ col, row, w, h, isValid: !isColliding });
+    col = Math.max(1, Math.min(maxCols - w + 1, col));
+    row = Math.max(1, row);
+    setShadow({ col, row, w, h, isValid: true });
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const sourceId = e.dataTransfer.getData('text/plain');
-    
-    if (shadow && sourceId === draggedId) {
-        if (shadow.isValid) {
-            const prefix = viewDevice === 'desktop' ? '' : `${viewDevice}_`;
-            onUpdateBlockProps(sourceId, { 
-                [`${prefix}colStart`]: shadow.col, 
-                [`${prefix}rowStart`]: shadow.row 
-            });
-        }
+    if (shadow && draggedId) {
+        const prefix = viewDevice === 'desktop' ? '' : `${viewDevice}_`;
+        onUpdateBlockProps(draggedId, { 
+            [`${prefix}colStart`]: shadow.col, 
+            [`${prefix}rowStart`]: shadow.row 
+        });
     }
-    
     setDraggedId(null);
     setShadow(null);
   };
 
-  const handleResizeStart = (e: React.MouseEvent, blockId: string) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const draggedBlock = blocks.find(b => b.id === blockId);
-    if (!draggedBlock) return;
-    
-    const { colSpan: currentCols, rowSpan: currentRows } = getDeviceProps(draggedBlock.props, viewDevice);
-
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const gap = 16;
-    
-    const onMove = (moveEvent: MouseEvent) => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-        
-        const colChange = Math.round(dx / (cellSize + gap));
-        const rowChange = Math.round(dy / (cellSize + gap));
-
-        let newCols = Math.max(1, Math.min(maxCols, currentCols + colChange));
-        let newRows = Math.max(1, Math.min(24, currentRows + rowChange)); 
-
-        if (newCols !== currentCols || newRows !== currentRows) {
-             const prefix = viewDevice === 'desktop' ? '' : `${viewDevice}_`;
-             onUpdateBlockProps(blockId, { 
-                 [`${prefix}colSpan`]: newCols, 
-                 [`${prefix}rowSpan`]: newRows 
-             });
-        }
-    };
-
-    const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+  const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '20, 20, 23';
   };
 
-  const renderGridLines = () => {
-      // Only show prominent grid lines when dragging
-      const isActive = draggedId !== null;
+  const theme = siteSettings.theme;
+  const surfaceRgb = hexToRgb(theme['--surface'] || '#141417');
+  const opacity = theme['--surface-opacity'] || '0.6';
 
-      return (
-          <div className={`
-              absolute inset-0 pointer-events-none z-0 grid gap-4 h-full transition-opacity duration-300
-              ${isActive ? 'opacity-100' : 'opacity-0'}
-          `}
-               style={{ 
-                   padding: viewDevice === 'mobile' ? '12px' : '16px',
-                   gridTemplateColumns: `repeat(${maxCols}, minmax(0, 1fr))`
-               }}
-          >
-              {Array.from({ length: maxCols }).map((_, i) => (
-                  <div key={i} className="h-full bg-white/5 rounded-sm"></div>
-              ))}
-          </div>
-      );
-  };
-
-  // Prepare background image if available
-  const bgImage = siteSettings.theme['--bg-image'];
   const canvasStyle: React.CSSProperties = {
-      transformOrigin: 'top center',
-      backgroundColor: 'var(--bg)',
-      color: 'var(--text)',
-      backgroundImage: bgImage ? `url(${bgImage})` : 'none',
+      backgroundColor: theme['--bg-type'] === 'color' ? theme['--bg'] : 'transparent',
+      backgroundImage: (theme['--bg-type'] === 'image' && theme['--bg-image']) ? `url(${theme['--bg-image']})` : 'none',
       backgroundSize: 'cover',
       backgroundPosition: 'center',
-      backgroundAttachment: 'fixed',
-      ...siteSettings.theme as React.CSSProperties
+      ...theme as any,
+      '--surface': `rgba(${surfaceRgb}, ${opacity})`
   };
 
-  const hasTopHeader = displayBlocks.some(b => 
-      b.type === 'page-header' && 
-      (!b.props.layoutPosition || b.props.layoutPosition === 'top')
-  );
-
   return (
-    <div 
-      className="flex-1 w-full overflow-y-auto bg-zinc-950 flex justify-center py-12 relative custom-scrollbar"
-      onClick={() => onSelectBlock(null)}
-    >
-      <div className={`relative transition-all duration-300 ${viewDevice !== 'desktop' ? 'mt-4 h-[85vh]' : 'w-full flex justify-center'}`}>
+    <div className="flex-1 w-full overflow-y-auto bg-zinc-950 flex justify-center py-12 relative custom-scrollbar" onClick={() => onSelectBlock(null)}>
+      <div className={`relative z-10 transition-all duration-300 ${viewDevice !== 'desktop' ? 'h-[85vh]' : 'w-full flex justify-center'}`}>
         <FrameWrapper viewDevice={viewDevice}>
           <div 
              ref={canvasRef}
-             className={`
-               ${widthClass} min-h-[90vh] transition-all duration-300 ease-in-out relative
-               ${viewDevice === 'mobile' ? 'p-3' : 'p-4'}
-               ${viewDevice === 'desktop' ? 'shadow-2xl' : ''}
-             `}
+             className={`${viewDevice === 'mobile' ? 'w-[375px]' : viewDevice === 'tablet' ? 'w-[768px]' : 'w-full max-w-[1200px]'} min-h-[90vh] transition-all p-8`}
              style={canvasStyle}
-             onClick={(e) => e.stopPropagation()} 
              onDragOver={handleDragOver} 
              onDrop={handleDrop}
+             onClick={(e) => e.stopPropagation()}
           >
-            {renderGridLines()}
-            
-            {displayBlocks.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center flex-col gap-4 pointer-events-none" style={{ color: 'var(--muted)' }}>
-                 <div className="text-6xl font-black opacity-5">EMPTY</div>
-                 <p className="text-sm">Start building your bento grid</p>
-              </div>
-            )}
-
-            <div 
-                className="grid-container grid gap-4"
-                style={{
-                    gridTemplateColumns: `repeat(${maxCols}, minmax(0, 1fr))`,
-                    gridTemplateRows: (hasTopHeader && viewDevice === 'desktop') ? 'min-content' : undefined,
-                    gridAutoFlow: viewDevice === 'desktop' ? 'row' : 'dense',
-                    gridAutoRows: `${cellSize}px`
+            <div className="grid-container grid"
+                style={{ 
+                    gridTemplateColumns: `repeat(${maxCols}, minmax(0, 1fr))`, 
+                    gridAutoRows: `${cellSize}px`,
+                    gap: `${gapSize}px`
                 }}
             >
-              {displayBlocks.map((block) => {
+              {blocks.map((block) => {
                 const Renderer = BLOCK_REGISTRY[block.type];
                 if (!Renderer) return null;
-
-                const isSelected = selectedBlockId === block.id;
-                const isDragging = draggedId === block.id;
+                const { colSpan, rowSpan, colStart, rowStart } = getDeviceProps(block.props, viewDevice);
                 const isHeader = block.type === 'page-header';
-                const isSpacer = block.type === 'spacer';
-                
-                // Inject Global Settings and Context for dynamic blocks
-                const extraProps = {
-                   _brand: siteSettings.brand,
-                   _context: { menu, pages, activePageId, onSelectPage }
+                const isSelected = selectedBlockId === block.id;
+
+                const gridStyle = isHeader ? { gridColumn: '1 / -1', gridRow: '1', order: -1 } : { 
+                    gridColumn: colStart ? `${colStart} / span ${colSpan}` : `span ${colSpan}`, 
+                    gridRow: rowStart ? `${rowStart} / span ${rowSpan}` : `span ${rowSpan}` 
                 };
 
-                const gridStyle = getGridStyle(block.type, block.props);
-                const { colSpan, rowSpan } = getDeviceProps(block.props, viewDevice);
-
                 return (
-                  <div 
-                    key={block.id}
+                  <div key={block.id} 
                     draggable={!isHeader}
-                    onDragStart={(e) => handleDragStart(e, block.id, block.props)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectBlock(block.id);
-                    }}
-                    className={`
-                      relative group transition-all duration-200 
-                      ${isSelected ? 'ring-2 ring-[var(--primary)] z-20' : isSpacer ? '' : 'hover:ring-1 hover:ring-[var(--primary)]/50'}
-                      ${isDragging ? 'opacity-25 grayscale' : 'opacity-100'}
-                      ${!isHeader ? 'cursor-grab active:cursor-grabbing' : ''}
-                      ${isSpacer && !isSelected ? 'opacity-0 hover:opacity-100 border border-dashed border-zinc-800' : ''}
-                    `}
-                    style={gridStyle as React.CSSProperties}
+                    onDragStart={(e) => { e.dataTransfer.setData('text', block.id); setDraggedId(block.id); onSelectBlock(block.id); }}
+                    onClick={(e) => { e.stopPropagation(); onSelectBlock(block.id); }}
+                    className={`relative group transition-all ${isSelected ? 'ring-2 ring-purple-500 z-50' : 'hover:ring-1 hover:ring-purple-500/50'}`}
+                    style={gridStyle}
                   >
-                    {(isSelected) && (
-                       <>
-                           <div className="absolute top-2 right-2 bg-[var(--primary)] text-white text-[10px] px-1 py-1 rounded-md shadow-lg flex items-center gap-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-                              <button onClick={(e) => { e.stopPropagation(); onLayerBlock(block.id, 'front'); }} className="p-1 hover:bg-white/20 rounded"><ChevronsUp size={12} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); onLayerBlock(block.id, 'back'); }} className="p-1 hover:bg-white/20 rounded"><ChevronsDown size={12} /></button>
-                              <div className="w-px h-3 bg-white/20 mx-0.5"></div>
-                              <button onClick={(e) => { e.stopPropagation(); onDuplicateBlock(block.id); }} className="p-1 hover:bg-white/20 rounded"><Copy size={12} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); onDeleteBlock(block.id); }} className="p-1 hover:bg-red-500 rounded"><Trash2 size={12} /></button>
-                           </div>
-                           
-                           {!isHeader && (
-                               <div 
-                                  className="absolute bottom-1 right-1 z-50 cursor-nwse-resize text-white/50 hover:text-white p-1.5 bg-[var(--bg)]/80 rounded-full shadow-sm hover:scale-110 transition-transform"
-                                  onMouseDown={(e) => handleResizeStart(e, block.id)}
-                               >
-                                  <MoveDiagonal size={14} />
-                               </div>
-                           )}
-                           
-                           <div className="absolute bottom-2 left-2 text-[9px] font-mono text-white/50 bg-black/50 px-1 rounded pointer-events-none backdrop-blur-sm">
-                               {colSpan}x{rowSpan} 
-                           </div>
-                       </>
+                    {isSelected && (
+                       <div className="absolute top-2 right-2 flex bg-purple-600 rounded shadow-lg z-50 p-1 gap-1">
+                          <button onClick={() => onDuplicateBlock(block.id)} className="p-1 hover:bg-white/20 rounded"><Copy size={12} /></button>
+                          <button onClick={() => onDeleteBlock(block.id)} className="p-1 hover:bg-red-500 rounded"><Trash2 size={12} /></button>
+                       </div>
                     )}
-                    
-                    <div className={`h-full ${isSelected ? 'pointer-events-none' : ''}`}>
-                       <Renderer {...block.props} {...extraProps} />
-                    </div>
+                    <Renderer {...block.props} _brand={siteSettings.brand} _context={{ menu, pages, activePageId, onSelectPage }} />
                   </div>
                 );
               })}
-              
               {shadow && (
-                  <div 
-                     className={`
-                        border-2 rounded-[var(--radius)] z-10 pointer-events-none transition-all duration-100 ease-out
-                        ${shadow.isValid ? 'border-[var(--primary)] bg-[var(--primary)]/10 shadow-[0_0_20px_rgba(139,92,246,0.3)]' : 'border-red-500 bg-red-500/10'}
-                     `}
-                     style={{
-                         gridColumn: `${shadow.col} / span ${shadow.w}`,
-                         gridRow: `${shadow.row} / span ${shadow.h}`
-                     }}
-                  >
-                      <div className={`absolute top-2 left-2 text-[10px] font-bold px-1.5 py-0.5 rounded ${shadow.isValid ? 'bg-[var(--primary)] text-white' : 'bg-red-500 text-white'}`}>
-                          {shadow.isValid ? `Move to ${shadow.col}, ${shadow.row}` : 'Invalid Position'}
-                      </div>
-                  </div>
+                <div 
+                  className="bg-purple-500/20 border-2 border-purple-500 border-dashed rounded-[var(--radius)] z-10 pointer-events-none" 
+                  style={{ gridColumn: `${shadow.col} / span ${shadow.w}`, gridRow: `${shadow.row} / span ${shadow.h}` }} 
+                />
               )}
             </div>
           </div>

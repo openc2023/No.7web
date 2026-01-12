@@ -3,59 +3,73 @@ import { MenuNode, SiteSettings } from './types';
 import { BLOCK_DEFINITIONS } from './lib/blocks';
 
 export const DEFAULT_THEME = {
-  '--bg': '#09090b', // Zinc-950
-  '--bg-image': '', // New: Background Image URL
-  '--surface': 'rgba(24, 24, 27, 0.3)', // Zinc-900 with opacity for glass
-  '--surface-hover': 'rgba(39, 39, 42, 0.5)', // Zinc-800
-  '--text': '#fafafa', // Zinc-50
-  '--muted': '#a1a1aa', // Zinc-400
-  '--border': 'rgba(255, 255, 255, 0.1)',
-  '--primary': '#8b5cf6', // Violet-500
-  '--radius': '6px', // Rounded corners
-  '--blur': '10px', // Glassmorphism blur
-  '--shadow': '0 0 0 1px rgba(255,255,255,0.05), 0 8px 30px rgba(0,0,0,0.5)',
+  '--bg': '#000000',
+  '--bg-type': 'color' as const,
+  '--bg-image': '',
+  '--bg-code': '',
+  '--surface': '#141417',
+  '--surface-hover': '#1e1e23',
+  '--surface-opacity': '0.6',
+  '--text': '#ffffff',
+  '--muted': '#a1a1aa',
+  '--border': 'rgba(255, 255, 255, 0.08)',
+  '--primary': '#a78bfa',
+  '--radius': '24px',
+  '--blur': '20px',
+  '--gap': '16px',
+  '--cell-size': '140px',
+  '--tablet-gap': '12px',
+  '--tablet-cell-size': '115px',
+  '--mobile-gap': '10px',
+  '--mobile-cell-size': '100px',
+  '--shadow': '0 0 0 1px rgba(255,255,255,0.05), 0 20px 50px rgba(0,0,0,0.5)',
   '--font-sans': '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif'
 };
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   brand: {
     type: 'icon',
-    iconClass: 'layers', 
+    iconClass: 'N7', 
     imageUrl: '',
-    title: 'Portfolio'
+    title: 'No.7 Digital'
   },
-  theme: DEFAULT_THEME
+  theme: DEFAULT_THEME as any
 };
 
 export const MOCK_MENU: MenuNode[] = [
   {
     id: 'home',
-    label: 'Home',
+    label: 'Index',
     type: 'page',
     filename: 'index.json',
   },
   {
-    id: 'projects',
-    label: 'Projects',
+    id: 'work',
+    label: 'Portfolio',
     type: 'page',
-    filename: 'projects.json',
+    filename: 'work.json',
     collapsed: false,
     children: [
         {
-            id: 'saas-dashboard',
-            label: 'SaaS Dashboard',
+            id: 'design-system',
+            label: 'Design System',
             type: 'page',
-            filename: 'saas-dashboard.json'
+            filename: 'design-system.json'
         },
         {
-            id: 'ecommerce',
-            label: 'E-commerce',
+            id: 'mobile-app',
+            label: 'Mobile App',
             type: 'page',
-            filename: 'ecommerce.json'
+            filename: 'mobile-app.json'
         }
     ]
+  },
+  {
+      id: 'about',
+      label: 'About',
+      type: 'page',
+      filename: 'about.json'
   }
 ];
 
-// Re-export the definitions from the new library source
 export const MOCK_COMPONENTS = BLOCK_DEFINITIONS;

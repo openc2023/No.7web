@@ -4,13 +4,6 @@ import { ComponentDefinition, MenuNode, Page } from '../../../types';
 import { COMMON_GRID_FIELDS, getCommonBlockStyle, BlockBackground, renderStaticBackground, getCommonStaticStyleString } from '../common';
 import { Folder, FileText, ArrowRight } from 'lucide-react';
 
-interface Context {
-  menu: MenuNode[];
-  pages: Record<string, Page>;
-  activePageId: string;
-  onSelectPage?: (id: string) => void;
-}
-
 export const ChildPagesGrid: React.FC<any> = (props) => {
     const { 
         layout, 
@@ -22,7 +15,6 @@ export const ChildPagesGrid: React.FC<any> = (props) => {
     
     const { menu, activePageId, onSelectPage } = _context || {};
     
-    // Recursive helper to find the current menu node
     const findNode = (nodes: MenuNode[], id: string): MenuNode | null => {
         for (const node of nodes) {
             if (node.id === id) return node;
@@ -59,7 +51,6 @@ export const ChildPagesGrid: React.FC<any> = (props) => {
         );
     }
 
-    // Dynamic grid columns
     const gridStyle = layout === 'grid' 
         ? { gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }
         : { gridTemplateColumns: '1fr' };
@@ -108,7 +99,6 @@ export const ChildPagesGrid: React.FC<any> = (props) => {
                                     </p>
                                 )}
 
-                                {/* Badge */}
                                 <div className="mt-3 flex mt-auto">
                                     <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] uppercase">
                                         {child.type}
@@ -141,13 +131,6 @@ export const ChildPagesGridDef: ComponentDefinition = {
         bindings: {}
     },
     render: (p, ctx) => {
-        // Find links
-        // In static generation, we assume links are relative like "project-alpha.html"
-        // But we need to find the node to get the filename/structure
-        
-        // 1. Find Current Page's Children
-        // This is tricky without knowing exactly *which* page contains this block.
-        // We need `activePageId` passed in ctx.
         const findNode = (nodes: MenuNode[], id: string): MenuNode | null => {
             for (const node of nodes) {
                 if (node.id === id) return node;
@@ -167,7 +150,7 @@ export const ChildPagesGridDef: ComponentDefinition = {
         }
 
         if (children.length === 0) {
-             return `<div class="glass-panel p-6 text-center text-zinc-500" style="${getCommonStaticStyleString(p)}">No pages found.</div>`;
+             return `<div class="glass-panel p-6 text-center text-zinc-500" style="${getCommonStaticStyleString(p)}">No sub-pages found.</div>`;
         }
         
         const gridStyle = p.layout === 'grid' 
@@ -175,11 +158,7 @@ export const ChildPagesGridDef: ComponentDefinition = {
             : 'grid-template-columns: 1fr';
 
         const itemsHtml = children.map(child => {
-            // Calculate Link Path. 
-            // If child is same level: ./child.html
-            // Static generator uses safeName logic.
-            const safeName = child.label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-            const href = `${safeName}.html`; // Basic assumption for child pages in same folder context
+            const href = (ctx.getHref) ? ctx.getHref(child.id) : '#';
 
             return `
                <a href="${href}" class="glass-panel relative group flex flex-col overflow-hidden hover:border-purple-500 transition-all cursor-pointer min-h-[140px] no-underline" style="${getCommonStaticStyleString(p)}">

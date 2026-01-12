@@ -1,6 +1,4 @@
 
-// --- Schema & Components ---
-
 export type FieldType = 'string' | 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'color' | 'image' | 'richtext';
 
 export interface SchemaField {
@@ -8,15 +6,18 @@ export interface SchemaField {
   label: string;
   type: FieldType;
   default?: any;
-  options?: string[]; // For 'select'
-  dynamicOptionsSource?: 'children'; // New: Instructs PropertyPanel to fetch options dynamically
+  options?: string[];
+  dynamicOptionsSource?: 'children';
   description?: string;
+  min?: number;
+  max?: number;
+  step?: number;
 }
 
 export interface SchemaBinding {
-  selector?: string; // CSS selector to target inside template
+  selector?: string;
   mode: 'text' | 'html' | 'attr' | 'style';
-  attr?: string; // If mode is 'attr'
+  attr?: string;
 }
 
 export interface ComponentSchema {
@@ -29,25 +30,23 @@ export interface StaticRenderContext {
     menu: MenuNode[];
     pages: Record<string, Page>;
     activePageId?: string;
+    getHref?: (id: string) => string;
 }
 
 export interface ComponentDefinition {
   name: string;
-  slug: string; // Folder name
+  slug: string;
   category: string;
-  icon: string; // FontAwesome suffix or Lucide name
+  icon: string;
   enabled: boolean;
   version: string;
   schema: ComponentSchema;
-  // Used for Static Site Generation. Returns HTML string.
   render?: (props: any, context: StaticRenderContext) => string; 
 }
 
-// --- Page & Content ---
-
 export interface Block {
   id: string;
-  type: string; // Corresponds to ComponentDefinition.slug
+  type: string;
   props: Record<string, any>;
 }
 
@@ -55,7 +54,7 @@ export interface Page {
   id: string;
   title: string;
   blocks: Block[];
-  // Metadata for storage
+  status?: 'draft' | 'published';
   _sha?: string; 
   _path?: string;
 }
@@ -64,18 +63,19 @@ export interface MenuNode {
   id: string;
   label: string;
   type: 'page' | 'folder';
-  filename?: string; // If page
+  filename?: string;
   collapsed?: boolean;
   children?: MenuNode[];
-  // Path in repository
   path?: string;
 }
 
-// --- Global Settings (Theme & Brand) ---
+export type BackgroundType = 'color' | 'image' | 'code';
 
 export interface SiteTheme {
   '--bg': string;
   '--surface': string;
+  '--surface-hover': string;
+  '--surface-opacity': string;
   '--text': string;
   '--muted': string;
   '--border': string;
@@ -83,7 +83,18 @@ export interface SiteTheme {
   '--radius': string;
   '--shadow': string;
   '--font-sans': string;
-  [key: string]: string;
+  '--bg-type': BackgroundType;
+  '--bg-image': string;
+  '--bg-code': string;
+  '--blur': string;
+  '--gap': string;
+  '--cell-size': string;
+  // Responsive variables
+  '--tablet-gap'?: string;
+  '--tablet-cell-size'?: string;
+  '--mobile-gap'?: string;
+  '--mobile-cell-size'?: string;
+  [key: string]: string | undefined;
 }
 
 export interface SiteBrand {
@@ -97,8 +108,8 @@ export interface GitHubConfig {
   owner: string;
   repo: string;
   branch: string;
-  token: string; // In a real app, use a proxy URL instead of a token
-  pathPrefix: string; // e.g., "content/pages"
+  token: string;
+  pathPrefix: string;
   isProxy?: boolean;
   proxyUrl?: string;
 }
@@ -107,13 +118,4 @@ export interface SiteSettings {
   brand: SiteBrand;
   theme: SiteTheme;
   github?: GitHubConfig;
-}
-
-// --- Editor State ---
-
-export interface EditorState {
-  menu: MenuNode[];
-  pages: Record<string, Page>;
-  activePageId: string;
-  selectedBlockId: string | null;
 }
