@@ -24,6 +24,13 @@ export interface ComponentSchema {
   bindings: Record<string, SchemaBinding>;
 }
 
+export interface StaticRenderContext {
+    siteSettings: SiteSettings;
+    menu: MenuNode[];
+    pages: Record<string, Page>;
+    activePageId?: string;
+}
+
 export interface ComponentDefinition {
   name: string;
   slug: string; // Folder name
@@ -32,8 +39,8 @@ export interface ComponentDefinition {
   enabled: boolean;
   version: string;
   schema: ComponentSchema;
-  // In a real app, 'template' would be HTML string. Here we might use a render helper or just simulate.
-  templateString?: string; 
+  // Used for Static Site Generation. Returns HTML string.
+  render?: (props: any, context: StaticRenderContext) => string; 
 }
 
 // --- Page & Content ---

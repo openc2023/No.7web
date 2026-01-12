@@ -1,18 +1,10 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  Menu, 
-  Box, 
-  Layers, 
-  Settings, 
-  Play, 
-  Monitor, 
-  Smartphone, 
-  Tablet,
-  Download,
-  Save,
-  Plus,
-  Loader2
+  MenuNode, SiteSettings, GitHubConfig, Page, Block
+} from './types';
+import { 
+  Loader2,
 } from 'lucide-react';
 import { Canvas } from './components/Canvas';
 import { StructureTree } from './components/StructureTree';
@@ -20,9 +12,14 @@ import { ComponentLibrary } from './components/ComponentLibrary';
 import { PropertyPanel } from './components/PropertyPanel';
 import { TopBar } from './components/TopBar';
 import { GitHubSettings } from './components/GitHubSettings';
-import { EditorState, Block, ComponentDefinition, Page, MenuNode, SiteSettings, GitHubConfig } from './types';
 import { MOCK_COMPONENTS, MOCK_MENU, DEFAULT_SITE_SETTINGS } from './constants';
 import { GitHubAdapter } from './lib/github-adapter';
+import { generateStaticSite } from './lib/static-site-generator';
+import { useHistory } from './hooks/use-history';
+
+const STORAGE_KEY_PAGES = 'no7_studio_pages';
+const STORAGE_KEY_MENU = 'no7_studio_menu';
+const STORAGE_KEY_SETTINGS = 'no7_studio_settings';
 
 const App: React.FC = () => {
   // --- Helpers ---
@@ -30,26 +27,45 @@ const App: React.FC = () => {
     return currentMenu.map(node => node.label).join(', ');
   };
 
-  // --- State ---
-  const [menu, setMenu] = useState<MenuNode[]>(MOCK_MENU);
-  
-  const [activePageId, setActivePageId] = useState<string>('home');
-  // Pages cache (loaded pages are stored here)
-  const [pages, setPages] = useState<Record<string, Page>>({
-    // Keep initial mock data for "Demo Mode" until GitHub connects
-    home: {
-      id: 'home',
-      title: 'Home',
-      blocks: [
-        { id: 'h1', type: 'page-header', props: { navLinks: 'Home, Works, About', sticky: true, layoutPosition: 'top' } },
-        { id: 'p1', type: 'profile-section', props: { name: 'Yysuni Clone', bio: 'Frontend Developer & UI Designer.', avatar: 'https://github.com/shadcn.png', showSocials: true, colSpan: 6, rowSpan: 4, colStart: 1, rowStart: 2 } },
-        { id: 'ts1', type: 'tech-stack', props: { title: 'My Stack', items: 'React, Next.js, Tailwind, Node.js, TypeScript, Figma', colSpan: 6, rowSpan: 2, colStart: 7, rowStart: 4 } },
-        { id: 'b1', type: 'bento-item', props: { title: 'Project Alpha', image: 'https://picsum.photos/600/600', colSpan: 6, rowSpan: 4, colStart: 1, rowStart: 6 } },
-      ]
-    }
+  // --- State Initialization with LocalStorage ---
+  const [menu, setMenu] = useState<MenuNode[]>(() => {
+      const saved = localStorage.getItem(STORAGE_KEY_MENU);
+      return saved ? JSON.parse(saved) : MOCK_MENU;
   });
   
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
+  // Use History Hook for Pages (Core Content)
+  const { 
+    state: pages, 
+    set: setPages, 
+    replace: replacePages, 
+    reset: resetPages,
+    undo, 
+    redo, 
+    canUndo, 
+    canRedo 
+  } = useHistory<Record<string, Page>>(() => {
+      const saved = localStorage.getItem(STORAGE_KEY_PAGES);
+      if (saved) return JSON.parse(saved);
+      // Default Mock Data
+      return {
+        home: {
+            id: 'home',
+            title: 'Home',
+            blocks: [
+                { id: 'h1', type: 'page-header', props: { navLinks: 'Home, Works, About', sticky: true, layoutPosition: 'top' } },
+                { id: 'p1', type: 'profile-section', props: { name: 'MVP User', bio: 'Welcome to your local editor.', avatar: 'https://github.com/shadcn.png', showSocials: true, colSpan: 6, rowSpan: 4, colStart: 1, rowStart: 2 } },
+                { id: 'b1', type: 'bento-item', props: { title: 'Start Building', image: 'https://picsum.photos/600/600', colSpan: 6, rowSpan: 4, colStart: 7, rowStart: 2 } },
+            ]
+        }
+      };
+  });
+  
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+      const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
+      return saved ? JSON.parse(saved) : DEFAULT_SITE_SETTINGS;
+  });
+
+  const [activePageId, setActivePageId] = useState<string>('home');
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [viewDevice, setViewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
 
@@ -62,33 +78,127 @@ const App: React.FC = () => {
   // --- Derived State ---
   const activePage = pages[activePageId] || { id: activePageId, title: 'Loading...', blocks: [] };
   const selectedBlock = activePage.blocks.find(b => b.id === selectedBlockId) || null;
-  
   const selectedComponentDef = selectedBlock 
     ? MOCK_COMPONENTS.find(c => c.slug === selectedBlock.type) 
     : null;
 
-  // --- GitHub Actions ---
+  // --- Persistence Effects ---
+  useEffect(() => {
+      localStorage.setItem(STORAGE_KEY_MENU, JSON.stringify(menu));
+  }, [menu]);
+
+  useEffect(() => {
+      localStorage.setItem(STORAGE_KEY_PAGES, JSON.stringify(pages));
+  }, [pages]);
+
+  useEffect(() => {
+      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(siteSettings));
+  }, [siteSettings]);
+
+  // Auto-connect GitHub if token exists on load
+  useEffect(() => {
+      if (siteSettings.github?.token && siteSettings.github.owner && siteSettings.github.repo) {
+          const newAdapter = new GitHubAdapter(siteSettings.github);
+          setAdapter(newAdapter);
+      }
+  }, []);
+
+  // --- Keyboard Shortcuts ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName) || (e.target as HTMLElement).isContentEditable) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          if (canRedo) redo();
+        } else {
+          if (canUndo) undo();
+        }
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        if (selectedBlockId) handleDuplicateBlock(selectedBlockId);
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+         if (selectedBlockId) {
+             e.preventDefault();
+             handleDeleteBlock(selectedBlockId);
+         }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedBlockId, canUndo, canRedo, activePageId, pages]); // dependencies for closure freshness
+
+  // --- Actions ---
+
+  const handlePublish = async () => {
+      setIsLoading(true);
+      try {
+          const blob = await generateStaticSite(siteSettings, menu, pages);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${siteSettings.brand.title.toLowerCase().replace(/\s+/g, '-')}-static-site.zip`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+      } catch (e: any) {
+          console.error(e);
+          alert("Failed to generate static site: " + e.message);
+      } finally {
+          setIsLoading(false);
+      }
+  };
 
   const handleGitHubConnect = async (config: GitHubConfig) => {
       setIsLoading(true);
       setGithubError(null);
       try {
           const newAdapter = new GitHubAdapter(config);
+          
+          // Verify connection by loading tree
           const menuTree = await newAdapter.loadSiteMap();
           
           setAdapter(newAdapter);
           setMenu(menuTree);
-          setPages({}); // Clear mock cache
           
-          // Try to load the first page if available
+          // Reset pages cache cleanly for new project
+          resetPages({}); 
+          
           if (menuTree.length > 0) {
-             const firstPageId = menuTree[0].id;
-             // Trigger load via handlePageChange (but we need to wait for state, so calling internal loader directly)
-             if (menuTree[0].path) {
-                 const pageData = await newAdapter.loadPage(menuTree[0].path);
-                 setPages({ [firstPageId]: pageData });
-                 setActivePageId(firstPageId);
+             const findFirstPage = (nodes: MenuNode[]): MenuNode | null => {
+                 for(const n of nodes) {
+                     if (n.type === 'page') return n;
+                     if (n.children) {
+                         const found = findFirstPage(n.children);
+                         if (found) return found;
+                     }
+                 }
+                 return null;
+             };
+             
+             const firstNode = findFirstPage(menuTree);
+             if (firstNode && firstNode.path) {
+                 const pageData = await newAdapter.loadPage(firstNode.path);
+                 // We use reset here to establish the initial state of the loaded project
+                 resetPages({ [firstNode.id]: pageData });
+                 setActivePageId(firstNode.id);
              }
+          } else {
+              // Handle empty repo: Create a default home page so user isn't stuck
+              const defaultHome: Page = { id: 'home', title: 'Home', blocks: [] };
+              resetPages({ home: defaultHome });
+              setMenu([{ id: 'home', label: 'Home', type: 'page', filename: 'home.json' }]);
+              setActivePageId('home');
           }
 
           setShowGitHubSettings(false);
@@ -102,7 +212,6 @@ const App: React.FC = () => {
 
   const handleSavePage = async () => {
      if (!adapter) {
-         alert("Please connect to GitHub first.");
          setShowGitHubSettings(true);
          return;
      }
@@ -112,10 +221,8 @@ const App: React.FC = () => {
 
      setIsLoading(true);
      try {
-         // Determine path if new
          let pageToSave = { ...page };
          if (!pageToSave._path) {
-             // Find path from menu or generate default
              const findPath = (nodes: MenuNode[]): string | undefined => {
                  for(const n of nodes) {
                      if (n.id === page.id) return n.path;
@@ -130,29 +237,39 @@ const App: React.FC = () => {
              if (foundPath) {
                  pageToSave._path = foundPath;
              } else {
-                 // Fallback for root pages
-                 pageToSave._path = `${siteSettings.github?.pathPrefix}/${page.id}.json`;
+                 const safeId = page.id.replace(/[^a-z0-9-]/g, '');
+                 pageToSave._path = `${siteSettings.github?.pathPrefix || 'content'}/${safeId}.json`;
              }
          }
 
-         const result = await adapter.savePage(pageToSave, `Update ${page.title}`);
+         const result = await adapter.savePage(pageToSave, `Update ${page.title} via No.7 Studio`);
          
-         // Update SHA locally
-         setPages(prev => ({
-             ...prev,
+         // Update SHA silently without triggering undo history
+         replacePages({
+             ...pages,
              [activePageId]: {
-                 ...prev[activePageId],
+                 ...pages[activePageId],
                  _sha: result.newSha,
                  _path: pageToSave._path
              }
-         }));
+         });
 
-         alert("Saved successfully to GitHub!");
+         alert("Synced to GitHub successfully!");
      } catch (err: any) {
-         alert(`Error saving: ${err.message}`);
+         console.error(err);
+         alert(`Error saving to GitHub: ${err.message}`);
      } finally {
          setIsLoading(false);
      }
+  };
+
+  const handleClearCache = () => {
+      if(confirm("Clear local cache? This will remove unsaved local changes and reset to defaults.")) {
+          localStorage.removeItem(STORAGE_KEY_PAGES);
+          localStorage.removeItem(STORAGE_KEY_MENU);
+          localStorage.removeItem(STORAGE_KEY_SETTINGS);
+          window.location.reload();
+      }
   };
 
 
@@ -212,8 +329,9 @@ const App: React.FC = () => {
         defaultProps.layoutPosition = 'top';
     }
     
-    // Auto-placement logic: Find the first available row at column 1 (naive)
-    const maxRow = activePage.blocks.reduce((max, b) => {
+    // Auto-placement logic
+    const currentBlocks = activePage.blocks;
+    const maxRow = currentBlocks.reduce((max, b) => {
         const rowEnd = (b.props.rowStart || 1) + (b.props.rowSpan || 1);
         return Math.max(max, rowEnd);
     }, 1);
@@ -229,17 +347,13 @@ const App: React.FC = () => {
       props: defaultProps
     };
 
-    setPages(prev => {
-        const currentBlocks = prev[activePageId].blocks;
-        let newBlocks = [...currentBlocks, newBlock];
-        return {
-          ...prev,
-          [activePageId]: {
-            ...prev[activePageId],
-            blocks: newBlocks
-          }
-        };
-    });
+    setPages(prev => ({
+      ...prev,
+      [activePageId]: {
+        ...prev[activePageId],
+        blocks: [...prev[activePageId].blocks, newBlock]
+      }
+    }));
     
     setSelectedBlockId(newBlock.id);
   };
@@ -256,32 +370,41 @@ const App: React.FC = () => {
   };
 
   const handleDuplicateBlock = (blockId: string) => {
-    setPages(prev => {
-      const page = prev[activePageId];
-      const index = page.blocks.findIndex(b => b.id === blockId);
-      if (index === -1) return prev;
+    // Need to use current state, not stale closure in keydown
+    // But since handleDuplicateBlock is called inside useEffect (which depends on pages), it's fine
+    // Or simpler: access functional update state if we just needed indices, but we need props.
+    // The useEffect dependency ensures freshness.
+    
+    const page = pages[activePageId];
+    if (!page) return;
+    
+    const index = page.blocks.findIndex(b => b.id === blockId);
+    if (index === -1) return;
 
-      const blockToCopy = page.blocks[index];
-      const newProps = JSON.parse(JSON.stringify(blockToCopy.props));
-      if (newProps.rowStart) newProps.rowStart += 1; 
+    const blockToCopy = page.blocks[index];
+    const newProps = JSON.parse(JSON.stringify(blockToCopy.props));
+    
+    // Slight offset for visibility or auto-flow will handle it
+    if (newProps.rowStart) newProps.rowStart += 1; 
 
-      const newBlock = {
-        ...blockToCopy,
-        id: `blk_${Date.now()}`,
-        props: newProps
-      };
+    const newBlock = {
+      ...blockToCopy,
+      id: `blk_${Date.now()}`,
+      props: newProps
+    };
 
-      const newBlocks = [...page.blocks];
-      newBlocks.splice(index + 1, 0, newBlock);
+    const newBlocks = [...page.blocks];
+    newBlocks.splice(index + 1, 0, newBlock);
 
-      return {
-        ...prev,
-        [activePageId]: {
-          ...page,
-          blocks: newBlocks
-        }
-      };
-    });
+    setPages(prev => ({
+      ...prev,
+      [activePageId]: {
+        ...prev[activePageId],
+        blocks: newBlocks
+      }
+    }));
+    
+    setSelectedBlockId(newBlock.id);
   };
 
   const handleMoveBlock = (blockId: string, direction: 'up' | 'down') => {
@@ -296,27 +419,16 @@ const App: React.FC = () => {
       if (index === -1) return prev;
 
       const block = blocks[index];
-      // Remove from current pos
       blocks.splice(index, 1);
 
-      if (action === 'front') {
-        blocks.push(block);
-      } else if (action === 'back') {
-        blocks.unshift(block);
-      } else if (action === 'forward') {
-        const newIndex = Math.min(blocks.length, index + 1);
-        blocks.splice(newIndex, 0, block);
-      } else if (action === 'backward') {
-        const newIndex = Math.max(0, index - 1);
-        blocks.splice(newIndex, 0, block);
-      }
+      if (action === 'front') blocks.push(block);
+      else if (action === 'back') blocks.unshift(block);
+      else if (action === 'forward') blocks.splice(Math.min(blocks.length, index + 1), 0, block);
+      else if (action === 'backward') blocks.splice(Math.max(0, index - 1), 0, block);
 
       return {
         ...prev,
-        [activePageId]: {
-          ...page,
-          blocks
-        }
+        [activePageId]: { ...page, blocks }
       };
     });
   };
@@ -353,7 +465,7 @@ const App: React.FC = () => {
   const handleAddPage = (title: string) => {
       const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
       if (pages[id]) {
-          alert("Page already exists locally. (Check cached pages)");
+          alert("Page already exists locally.");
           setActivePageId(id);
           return;
       }
@@ -367,20 +479,13 @@ const App: React.FC = () => {
       };
 
       let newMenu = [...menu];
-
       if (activePageId && activePageId !== 'home') {
           const addAsChild = (nodes: MenuNode[]): MenuNode[] => {
               return nodes.map(node => {
                   if (node.id === activePageId) {
-                      return {
-                          ...node,
-                          collapsed: false,
-                          children: [...(node.children || []), newMenuNode]
-                      };
+                      return { ...node, collapsed: false, children: [...(node.children || []), newMenuNode] };
                   }
-                  if (node.children) {
-                      return { ...node, children: addAsChild(node.children) };
-                  }
+                  if (node.children) return { ...node, children: addAsChild(node.children) };
                   return node;
               });
           };
@@ -390,7 +495,6 @@ const App: React.FC = () => {
       }
 
       setMenu(newMenu);
-      
       const newNavLinks = getNavLinksString(newMenu);
       const now = Date.now();
 
@@ -398,234 +502,113 @@ const App: React.FC = () => {
           id,
           title,
           blocks: [
-              { 
-                  id: `h_${now}`, 
-                  type: 'page-header', 
-                  props: { 
-                      navLinks: newNavLinks, 
-                      sticky: true,
-                      layoutPosition: 'top'
-                  } 
-              },
-              {
-                  id: `b_${now + 1}`,
-                  type: 'rich-text',
-                  props: { 
-                      content: `<h1>${title}</h1><p>Start editing...</p>`,
-                      colSpan: 8, rowSpan: 3, colStart: 1, rowStart: 2
-                  }
-              }
+              { id: `h_${now}`, type: 'page-header', props: { navLinks: newNavLinks, sticky: true, layoutPosition: 'top' } },
+              { id: `b_${now + 1}`, type: 'rich-text', props: { content: `<h1>${title}</h1><p>Start editing...</p>`, colSpan: 8, rowSpan: 3, colStart: 1, rowStart: 2 } }
           ]
       };
 
-      setPages(prev => {
-          const nextPages = { ...prev, [id]: newPage };
-          // Update all headers
-          Object.keys(nextPages).forEach(key => {
-              const page = nextPages[key];
-              const needsUpdate = page.blocks.some(b => b.type === 'page-header' && b.props.navLinks !== newNavLinks);
-              if (needsUpdate) {
-                  nextPages[key] = {
-                      ...page,
-                      blocks: page.blocks.map(b => {
-                          if (b.type === 'page-header') {
-                              return { ...b, props: { ...b.props, navLinks: newNavLinks } };
-                          }
-                          return b;
-                      })
-                  };
-              }
-          });
-          return nextPages;
-      });
-
+      setPages(prev => ({ ...prev, [id]: newPage }));
+      syncHeaders(newMenu);
       setActivePageId(id);
-      setSelectedBlockId(null);
   };
 
   const handleDeletePage = (pageId: string) => {
-     if (pageId === 'home') {
-         alert("Cannot delete home page");
-         return;
-     }
-     if (!window.confirm("Delete this page? This will only remove it from the menu until you save.")) return;
+     if (pageId === 'home') { alert("Cannot delete home page"); return; }
+     if (!window.confirm("Delete this page?")) return;
      
      const removeNode = (nodes: MenuNode[]): MenuNode[] => {
-         return nodes.filter(n => n.id !== pageId).map(n => {
-             if (n.children) {
-                 return { ...n, children: removeNode(n.children) };
-             }
-             return n;
-         });
+         return nodes.filter(n => n.id !== pageId).map(n => ({ ...n, children: n.children ? removeNode(n.children) : undefined }));
      };
      const newMenu = removeNode(menu);
      setMenu(newMenu);
      syncHeaders(newMenu);
-     
      setPages(prev => {
          const next = { ...prev };
          delete next[pageId];
          return next;
      });
-     
      if (activePageId === pageId) setActivePageId('home');
   };
 
   const handleMoveNode = (draggedId: string, targetId: string) => {
     if (draggedId === targetId) return;
-
-    // --- Circular Dependency Check ---
+    
+    // Menu logic remains complex, we do simple deep clone for MVP safety
+    const clone = JSON.parse(JSON.stringify(menu));
     let draggedNode: MenuNode | null = null;
-
-    // 1. Find the dragged node first to check its children
-    const findDragged = (nodes: MenuNode[]) => {
+    
+    const remove = (nodes: MenuNode[]): MenuNode[] => {
+        const res = [];
         for(const n of nodes) {
-            if (n.id === draggedId) { draggedNode = n; return; }
-            if (n.children) findDragged(n.children);
+            if(n.id === draggedId) { draggedNode = n; continue; }
+            if(n.children) n.children = remove(n.children);
+            res.push(n);
         }
+        return res;
     };
-    findDragged(menu);
     
-    // 2. Recursively check if targetId is inside draggedNode's subtree
-    const isDescendant = (parent: MenuNode | null, target: string): boolean => {
-        if (!parent || !parent.children) return false;
-        for (const child of parent.children) {
-            if (child.id === target) return true;
-            if (isDescendant(child, target)) return true;
-        }
-        return false;
-    };
-
-    if (draggedNode && isDescendant(draggedNode, targetId)) {
-        console.warn("Cannot move a node into its own descendant.");
-        return;
-    }
-    // ---------------------------------
-
-    const removeNodeRecursive = (nodes: MenuNode[]): MenuNode[] => {
-        const result: MenuNode[] = [];
-        for (const node of nodes) {
-            if (node.id === draggedId) {
-                // draggedNode is already captured above
-                continue;
-            }
-            if (node.children) {
-                const newChildren = removeNodeRecursive(node.children);
-                if (newChildren !== node.children) {
-                    result.push({ ...node, children: newChildren });
-                } else {
-                    result.push(node);
-                }
-            } else {
-                result.push(node);
-            }
-        }
-        return result;
-    };
-
-    const menuWithoutDragged = removeNodeRecursive(menu);
+    const menuWithout = remove(clone);
     
-    if (!draggedNode) return;
+    if(!draggedNode) return;
 
-    let finalMenu: MenuNode[] = [];
-
-    if (targetId === 'root') {
-        finalMenu = [...menuWithoutDragged, draggedNode];
+    if(targetId === 'root') {
+        setMenu([...menuWithout, draggedNode]);
     } else {
-        const insertNodeRecursive = (nodes: MenuNode[]): MenuNode[] => {
-            return nodes.map(node => {
-                if (node.id === targetId) {
-                    return {
-                        ...node,
-                        collapsed: false,
-                        children: [...(node.children || []), draggedNode!]
-                    };
+        const insert = (nodes: MenuNode[]): MenuNode[] => {
+            return nodes.map(n => {
+                if(n.id === targetId) {
+                    return { ...n, collapsed: false, children: [...(n.children||[]), draggedNode!] };
                 }
-                if (node.children) {
-                    const newChildren = insertNodeRecursive(node.children);
-                    if (newChildren !== node.children) {
-                        return { ...node, children: newChildren };
-                    }
-                }
-                return node;
+                if(n.children) n.children = insert(n.children);
+                return n;
             });
         };
-        finalMenu = insertNodeRecursive(menuWithoutDragged);
+        setMenu(insert(menuWithout));
     }
-    
-    setMenu(finalMenu);
-    syncHeaders(finalMenu);
   };
 
   const handlePageChange = async (pageId: string) => {
-    // If we have the page in cache, just switch
+    // 1. Try Cache
     if (pages[pageId]) {
         setActivePageId(pageId);
         setSelectedBlockId(null);
         return;
     }
 
-    // Helper to find node in menu
-    const findNode = (nodes: MenuNode[]): MenuNode | null => {
-        for(const n of nodes) {
-            if (n.id === pageId) return n;
-            if (n.children) {
-                const found = findNode(n.children);
-                if (found) return found;
+    // 2. Try GitHub
+    if (adapter) {
+        const findPath = (nodes: MenuNode[]): string | undefined => {
+             for(const n of nodes) {
+                 if(n.id === pageId) return n.path;
+                 if(n.children) { const f = findPath(n.children); if(f) return f; }
+             }
+        };
+        const path = findPath(menu);
+        if(path) {
+            setIsLoading(true);
+            try {
+                const pageData = await adapter.loadPage(path);
+                // Load without history trigger? Or with? 
+                // Usually loading a page is not an "action" to undo, but a navigation.
+                // However, adding it to the 'pages' cache IS a state change.
+                // We use replacePages to update the cache without making "loading" an undo step.
+                replacePages({ ...pages, [pageId]: pageData });
+                setActivePageId(pageId);
+            } catch(e) {
+                console.error(e);
+                alert("Could not load page from GitHub.");
+            } finally {
+                setIsLoading(false);
             }
+            return;
         }
-        return null;
-    };
-
-    const node = findNode(menu);
-
-    // If we have an adapter and the node exists with a path, fetch it
-    if (adapter && node && node.path) {
-        setIsLoading(true);
-        try {
-            const pageData = await adapter.loadPage(node.path);
-            setPages(prev => ({ ...prev, [pageId]: pageData }));
-            setActivePageId(pageId);
-            setSelectedBlockId(null);
-        } catch (err) {
-            console.error(err);
-            alert("Failed to load page content.");
-        } finally {
-            setIsLoading(false);
-        }
-        return;
     }
 
-    // Mock Mode / Fallback: If page exists in menu but not in pages (and no adapter), generate it
-    if (node) {
-         // Create a temporary page entry so we can navigate to it
-         const newPage: Page = {
-             id: pageId,
-             title: node.label,
-             blocks: [
-                 { 
-                    id: `ph_${Date.now()}`, 
-                    type: 'page-header', 
-                    props: { 
-                        navLinks: getNavLinksString(menu), 
-                        sticky: true,
-                        layoutPosition: 'top' 
-                    } 
-                 },
-                 {
-                    id: `txt_${Date.now()}`,
-                    type: 'rich-text',
-                    props: {
-                        content: `<h1>${node.label}</h1><p>Start adding blocks...</p>`
-                    }
-                 }
-             ]
-         };
-         setPages(prev => ({ ...prev, [pageId]: newPage }));
-         setActivePageId(pageId);
-         setSelectedBlockId(null);
-    } else {
-         console.warn("Page not found in menu.");
+    // 3. Fallback
+    setActivePageId(pageId); 
+    if (!pages[pageId]) {
+         const newPage = { id: pageId, title: pageId, blocks: [] };
+         replacePages({ ...pages, [pageId]: newPage });
     }
   };
 
@@ -639,6 +622,7 @@ const App: React.FC = () => {
             onConnect={handleGitHubConnect}
             isConnected={!!adapter}
             error={githubError}
+            onClearCache={handleClearCache}
          />
       )}
 
@@ -646,7 +630,7 @@ const App: React.FC = () => {
           <div className="absolute inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center pointer-events-none">
               <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 flex items-center gap-3 shadow-xl">
                   <Loader2 className="animate-spin text-purple-500" size={20} />
-                  <span className="text-sm font-medium">Syncing with GitHub...</span>
+                  <span className="text-sm font-medium">Processing...</span>
               </div>
           </div>
       )}
@@ -656,13 +640,16 @@ const App: React.FC = () => {
         viewDevice={viewDevice}
         setViewDevice={setViewDevice}
         onSave={handleSavePage}
-        onPublish={() => alert('Exporting static site...')}
+        onPublish={handlePublish}
         onOpenSettings={() => setShowGitHubSettings(true)}
         isGitHubConnected={!!adapter}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={undo}
+        onRedo={redo}
       />
 
       <div className="flex flex-1 overflow-hidden relative">
-        
         <div className="w-64 border-r border-zinc-800 bg-zinc-900 flex flex-col">
           <div className="h-full overflow-y-auto">
              <StructureTree 
@@ -693,7 +680,6 @@ const App: React.FC = () => {
               onUpdateBlockProps={handleUpdateBlockProps}
               componentDefs={MOCK_COMPONENTS}
               siteSettings={siteSettings}
-              // Pass Global State for Context-Aware Blocks
               menu={menu}
               pages={pages}
               activePageId={activePageId}
@@ -707,7 +693,6 @@ const App: React.FC = () => {
             onAddComponent={handleAddComponent} 
           />
         </div>
-
       </div>
 
       <div className="h-72 border-t border-zinc-800 bg-zinc-900 w-full z-10 flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)]">
@@ -717,12 +702,10 @@ const App: React.FC = () => {
             onUpdateProps={handleUpdateBlockProps}
             siteSettings={siteSettings}
             onUpdateSiteSettings={setSiteSettings}
-            // Pass global state for dynamic properties
             menu={menu}
             activePageId={activePageId}
          />
       </div>
-
     </div>
   );
 };

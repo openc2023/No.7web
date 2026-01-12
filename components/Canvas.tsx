@@ -68,6 +68,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   const canvasRef = useRef<HTMLDivElement>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   
+  // Store the offset of the mouse relative to the block's top-left corner
+  const dragOffset = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
+  
   // Shadow now tracks validity
   const [shadow, setShadow] = useState<{col: number, row: number, w: number, h: number, isValid: boolean} | null>(null);
   
@@ -239,8 +242,18 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // --- Drag & Reposition Logic ---
   const handleDragStart = (e: React.DragEvent, id: string, props: any) => {
+    // 1. Set Transfer Data
     e.dataTransfer.setData('text/plain', id);
     e.dataTransfer.effectAllowed = 'move';
+    
+    // 2. Calculate Grab Offset
+    // This fixes the issue where blocks snap to the mouse position instead of maintaining relative position
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    dragOffset.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
+
     setDraggedId(id);
     onSelectBlock(id);
   };
@@ -261,16 +274,18 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!gridEl) return;
     
     const rect = gridEl.getBoundingClientRect();
-    const relX = e.clientX - rect.left;
-    const relY = e.clientY - rect.top;
+    
+    // Calculate Position relative to grid, ADJUSTING FOR GRAB OFFSET
+    const relX = e.clientX - rect.left - dragOffset.current.x;
+    const relY = e.clientY - rect.top - dragOffset.current.y;
     
     const step = cellSize + gapSize;
     
-    // 1-based index
-    let col = Math.floor(relX / step) + 1;
-    let row = Math.floor(relY / step) + 1;
+    // 1-based index with better rounding for magnetic feel
+    let col = Math.round(relX / step) + 1;
+    let row = Math.round(relY / step) + 1;
     
-    // Clamp
+    // Clamp to boundaries
     if (col < 1) col = 1;
     if (col > maxCols - w + 1) col = maxCols - w + 1;
     if (row < 1) row = 1;
@@ -341,15 +356,21 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   const renderGridLines = () => {
+      // Only show prominent grid lines when dragging
+      const isActive = draggedId !== null;
+
       return (
-          <div className="absolute inset-0 pointer-events-none z-0 grid gap-4 h-full" 
+          <div className={`
+              absolute inset-0 pointer-events-none z-0 grid gap-4 h-full transition-opacity duration-300
+              ${isActive ? 'opacity-100' : 'opacity-0'}
+          `}
                style={{ 
                    padding: viewDevice === 'mobile' ? '12px' : '16px',
                    gridTemplateColumns: `repeat(${maxCols}, minmax(0, 1fr))`
                }}
           >
               {Array.from({ length: maxCols }).map((_, i) => (
-                  <div key={i} className="h-full border-l border-r border-dashed border-white/5 opacity-50 first:border-l last:border-r"></div>
+                  <div key={i} className="h-full bg-white/5 rounded-sm"></div>
               ))}
           </div>
       );
@@ -440,7 +461,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                     className={`
                       relative group transition-all duration-200 
                       ${isSelected ? 'ring-2 ring-[var(--primary)] z-20' : isSpacer ? '' : 'hover:ring-1 hover:ring-[var(--primary)]/50'}
-                      ${isDragging ? 'opacity-20 grayscale' : 'opacity-100'}
+                      ${isDragging ? 'opacity-25 grayscale' : 'opacity-100'}
                       ${!isHeader ? 'cursor-grab active:cursor-grabbing' : ''}
                       ${isSpacer && !isSelected ? 'opacity-0 hover:opacity-100 border border-dashed border-zinc-800' : ''}
                     `}
@@ -481,14 +502,18 @@ export const Canvas: React.FC<CanvasProps> = ({
               {shadow && (
                   <div 
                      className={`
-                        border-2 border-dashed rounded-[var(--radius)] z-10 pointer-events-none transition-all duration-75
-                        ${shadow.isValid ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-red-500 bg-red-500/10'}
+                        border-2 rounded-[var(--radius)] z-10 pointer-events-none transition-all duration-100 ease-out
+                        ${shadow.isValid ? 'border-[var(--primary)] bg-[var(--primary)]/10 shadow-[0_0_20px_rgba(139,92,246,0.3)]' : 'border-red-500 bg-red-500/10'}
                      `}
                      style={{
                          gridColumn: `${shadow.col} / span ${shadow.w}`,
                          gridRow: `${shadow.row} / span ${shadow.h}`
                      }}
-                  />
+                  >
+                      <div className={`absolute top-2 left-2 text-[10px] font-bold px-1.5 py-0.5 rounded ${shadow.isValid ? 'bg-[var(--primary)] text-white' : 'bg-red-500 text-white'}`}>
+                          {shadow.isValid ? `Move to ${shadow.col}, ${shadow.row}` : 'Invalid Position'}
+                      </div>
+                  </div>
               )}
             </div>
           </div>

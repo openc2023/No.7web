@@ -17,5 +17,6 @@ export const SpacerDef: ComponentDefinition = {
     schema: {
         fields: [...COMMON_GRID_FIELDS as any],
         bindings: {}
-    }
+    },
+    render: () => `<div></div>`
 };

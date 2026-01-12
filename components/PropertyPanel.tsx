@@ -7,7 +7,7 @@ import {
   Code, Eye, Underline,
   AlignLeft, AlignCenter, AlignRight, Palette,
   Globe, LayoutTemplate, Type as TypeIcon, Image as ImageIcon,
-  Box, Droplets, Gauge, Move, CheckSquare, Square
+  Box, Droplets, Gauge, Move, CheckSquare, Square, Upload, FileUp
 } from 'lucide-react';
 
 interface PropertyPanelProps {
@@ -20,7 +20,7 @@ interface PropertyPanelProps {
   activePageId?: string;
 }
 
-// --- Rich Text Editor Component (Unchanged) ---
+// --- Rich Text Editor Component (Updated) ---
 const RichTextInput: React.FC<{ value: string; onChange: (val: string) => void }> = ({ value, onChange }) => {
   const [isSourceMode, setIsSourceMode] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -38,6 +38,7 @@ const RichTextInput: React.FC<{ value: string; onChange: (val: string) => void }
     document.execCommand('styleWithCSS', false, 'true');
     document.execCommand(command, false, val);
     if (editorRef.current) onChange(editorRef.current.innerHTML);
+    // Keep focus
     if (!['foreColor', 'fontSize'].includes(command)) editorRef.current?.focus();
   };
 
@@ -46,8 +47,18 @@ const RichTextInput: React.FC<{ value: string; onChange: (val: string) => void }
     if (url) exec('createLink', url);
   };
 
+  // FIX: Use onMouseDown with preventDefault to keep selection active
   const ToolbarButton = ({ onClick, icon: Icon, active = false, title }: any) => (
-    <button type="button" onClick={onClick} disabled={isSourceMode} className={`p-1.5 rounded transition-colors shrink-0 ${active ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700'} ${isSourceMode ? 'opacity-30 cursor-not-allowed' : ''}`} title={title}>
+    <button 
+        type="button" 
+        onMouseDown={(e) => {
+            e.preventDefault(); // Prevents focus loss from contentEditable
+            onClick();
+        }} 
+        disabled={isSourceMode} 
+        className={`p-1.5 rounded transition-colors shrink-0 ${active ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700'} ${isSourceMode ? 'opacity-30 cursor-not-allowed' : ''}`} 
+        title={title}
+    >
         <Icon size={13} />
     </button>
   );
@@ -70,6 +81,7 @@ const RichTextInput: React.FC<{ value: string; onChange: (val: string) => void }
           <div className="w-px h-4 bg-zinc-600 mx-1 self-center shrink-0" />
           <div className="relative flex items-center justify-center p-1.5 rounded hover:bg-zinc-700 cursor-pointer text-zinc-400 hover:text-zinc-100 shrink-0" title="Text Color">
             <Palette size={13} />
+            {/* Color input needs special handling, we let it focus but restore afterwards if needed */}
             <input type="color" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onChange={(e) => exec('foreColor', e.target.value)} disabled={isSourceMode} />
           </div>
           <select className="h-6 bg-zinc-800 text-[10px] text-zinc-300 border border-zinc-700 rounded px-1 outline-none w-16 shrink-0 disabled:opacity-30" onChange={(e) => exec('fontSize', e.target.value)} defaultValue="3" title="Font Size" disabled={isSourceMode}>
@@ -168,6 +180,20 @@ const FieldInput: React.FC<{
       return [];
   };
 
+  // Helper for File Upload (Image)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+          if (reader.result) {
+              onChange(reader.result as string);
+          }
+      };
+      reader.readAsDataURL(file);
+  };
+
   switch (field.type) {
     case 'string': return <input type="text" value={value || ''} onChange={(e) => onChange(e.target.value)} className={commonClasses} />;
     case 'number': return <input type="number" value={value || 0} onChange={(e) => onChange(Number(e.target.value))} className={commonClasses} />;
@@ -177,7 +203,22 @@ const FieldInput: React.FC<{
     case 'text': return <textarea rows={3} value={value || ''} onChange={(e) => onChange(e.target.value)} className={`${commonClasses} font-mono`} />;
     case 'richtext': return <RichTextInput value={value} onChange={onChange} />;
     case 'color': return <div className="flex gap-2"><input type="color" value={value || '#000000'} onChange={(e) => onChange(e.target.value)} className="h-8 w-12 bg-transparent border-none p-0 cursor-pointer" /><input type="text" value={value || ''} onChange={(e) => onChange(e.target.value)} className={commonClasses} /></div>;
-    case 'image': return <div className="flex flex-col gap-2">{value && <img src={value} alt="Preview" className="w-full h-24 object-cover rounded border border-zinc-700" />}<input type="text" placeholder="Image URL" value={value || ''} onChange={(e) => onChange(e.target.value)} className={commonClasses} /></div>;
+    case 'image': return (
+        <div className="flex flex-col gap-2">
+            {value && (
+                <div className="relative group border border-zinc-700 rounded overflow-hidden h-24 bg-black/50">
+                    <img src={value} alt="Preview" className="w-full h-full object-contain" />
+                </div>
+            )}
+            <div className="flex gap-2">
+                <input type="text" placeholder="https://..." value={value || ''} onChange={(e) => onChange(e.target.value)} className={commonClasses} />
+                <label className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white border border-zinc-700 rounded cursor-pointer transition-colors" title="Upload Local Image">
+                    <FileUp size={16} />
+                    <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                </label>
+            </div>
+        </div>
+    );
     default: return null;
   }
 };

@@ -1,20 +1,28 @@
 
 import React from 'react';
 import { ComponentDefinition } from '../../../types';
-import { COMMON_GRID_FIELDS } from '../common';
+import { COMMON_GRID_FIELDS, getCommonBlockStyle, BlockBackground, renderStaticBackground, getCommonStaticStyleString } from '../common';
 
-export const RichText: React.FC<any> = ({ content }) => {
+export const RichText: React.FC<any> = (props) => {
+  const { content } = props;
+  
+  const style = {
+      color: 'var(--text)',
+      ...getCommonBlockStyle(props)
+  };
+
   return (
     <div 
-        className="prose prose-invert prose-sm max-w-none p-6 border border-[var(--border)] rounded-[var(--radius)] h-full shadow-[var(--shadow)] overflow-y-auto custom-scrollbar" 
-        style={{ 
-            color: 'var(--text)',
-            backgroundColor: 'var(--surface)', 
-            backdropFilter: 'blur(var(--blur))',
-            WebkitBackdropFilter: 'blur(var(--blur))'
-        }} 
-        dangerouslySetInnerHTML={{ __html: content }} 
-    />
+        className="relative h-full overflow-hidden" 
+        style={style}
+    >
+        <BlockBackground props={props} />
+        
+        <div 
+            className="relative z-10 prose prose-invert prose-sm max-w-none p-6 h-full overflow-y-auto custom-scrollbar"
+            dangerouslySetInnerHTML={{ __html: content }} 
+        />
+    </div>
   );
 };
 
@@ -33,5 +41,15 @@ export const RichTextDef: ComponentDefinition = {
     bindings: {
       content: { mode: 'html', selector: '.content' }
     }
+  },
+  render: (p) => {
+      return `
+        <div class="glass-panel relative w-full h-full overflow-hidden" style="color: var(--text); ${getCommonStaticStyleString(p)}">
+             ${renderStaticBackground(p)}
+             <div class="relative z-10 prose prose-invert prose-sm max-w-none p-6 h-full overflow-y-auto custom-scrollbar">
+                ${p.content}
+             </div>
+        </div>
+      `;
   }
 };

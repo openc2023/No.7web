@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Github, Save, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import { Github, Save, Wifi, WifiOff, AlertTriangle, Trash2 } from 'lucide-react';
 import { SiteSettings, GitHubConfig } from '../types';
 
 interface GitHubSettingsProps {
@@ -9,9 +9,10 @@ interface GitHubSettingsProps {
     onConnect: (config: GitHubConfig) => void;
     isConnected: boolean;
     error: string | null;
+    onClearCache?: () => void;
 }
 
-export const GitHubSettings: React.FC<GitHubSettingsProps> = ({ settings, onUpdate, onConnect, isConnected, error }) => {
+export const GitHubSettings: React.FC<GitHubSettingsProps> = ({ settings, onUpdate, onConnect, isConnected, error, onClearCache }) => {
     const [config, setConfig] = useState<GitHubConfig>(settings.github || {
         owner: '',
         repo: '',
@@ -96,7 +97,7 @@ export const GitHubSettings: React.FC<GitHubSettingsProps> = ({ settings, onUpda
                             <label className="text-[11px] font-medium text-zinc-400 uppercase">Content Root</label>
                             <input 
                                 type="text" 
-                                placeholder="path/to/json"
+                                placeholder="e.g. content (optional)"
                                 className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-purple-500 outline-none"
                                 value={config.pathPrefix}
                                 onChange={e => handleChange('pathPrefix', e.target.value)}
@@ -107,9 +108,6 @@ export const GitHubSettings: React.FC<GitHubSettingsProps> = ({ settings, onUpda
                     <div className="space-y-1">
                         <label className="text-[11px] font-medium text-zinc-400 uppercase flex justify-between">
                             <span>Personal Access Token (PAT)</span>
-                            <span className="text-[10px] text-zinc-500 normal-case opacity-70">
-                                Required for private repos
-                            </span>
                         </label>
                         <input 
                             type="password" 
@@ -119,15 +117,24 @@ export const GitHubSettings: React.FC<GitHubSettingsProps> = ({ settings, onUpda
                             onChange={e => handleChange('token', e.target.value)}
                         />
                          <p className="text-[10px] text-zinc-500 mt-1">
-                            ⚠️ Tokens are stored in browser memory only. For production, use a proxy backend.
+                            Permissions required: <code>repo</code> (for private) or <code>public_repo</code>.
                         </p>
                     </div>
                 </div>
 
-                <div className="p-4 bg-zinc-850 border-t border-zinc-800 flex justify-end gap-2">
+                <div className="p-4 bg-zinc-850 border-t border-zinc-800 flex justify-between gap-2">
+                    {onClearCache && (
+                        <button 
+                            onClick={onClearCache}
+                            className="text-red-400 hover:text-red-300 px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-red-500/10 rounded"
+                            title="Reset all local data"
+                        >
+                            <Trash2 size={14} /> Clear Local Data
+                        </button>
+                    )}
                     <button 
                         onClick={handleSave}
-                        className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded text-xs font-medium flex items-center gap-2 transition-colors"
+                        className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded text-xs font-medium flex items-center gap-2 transition-colors ml-auto"
                     >
                         <Save size={14} />
                         Connect & Load
