@@ -1,13 +1,13 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Block, ComponentDefinition, SchemaField, SiteSettings } from '../types';
+import { Block, ComponentDefinition, SchemaField, SiteSettings, MenuNode } from '../types';
 import { 
   Settings2, XCircle, Bold, Italic, 
   Heading as HeadingIcon, Type, List, Link as LinkIcon,
   Code, Eye, Underline,
   AlignLeft, AlignCenter, AlignRight, Palette,
   Globe, LayoutTemplate, Type as TypeIcon, Image as ImageIcon,
-  Box, Droplets, Gauge, Move
+  Box, Droplets, Gauge, Move, CheckSquare, Square
 } from 'lucide-react';
 
 interface PropertyPanelProps {
@@ -16,6 +16,8 @@ interface PropertyPanelProps {
   onUpdateProps: (blockId: string, props: Record<string, any>) => void;
   siteSettings: SiteSettings;
   onUpdateSiteSettings: (settings: SiteSettings) => void;
+  menu?: MenuNode[];
+  activePageId?: string;
 }
 
 // --- Rich Text Editor Component (Unchanged) ---
@@ -92,15 +94,86 @@ const RichTextInput: React.FC<{ value: string; onChange: (val: string) => void }
   );
 }
 
+// --- MultiSelect Input Component ---
+const MultiSelectInput: React.FC<{ 
+    options: { label: string, value: string }[], 
+    value: string[], 
+    onChange: (val: string[]) => void 
+}> = ({ options, value = [], onChange }) => {
+    
+    const handleToggle = (optionValue: string) => {
+        if (value.includes(optionValue)) {
+            onChange(value.filter(v => v !== optionValue));
+        } else {
+            onChange([...value, optionValue]);
+        }
+    };
+
+    if (options.length === 0) {
+        return <div className="text-[10px] text-zinc-600 italic px-1">No options available.</div>;
+    }
+
+    return (
+        <div className="flex flex-col gap-1 max-h-40 overflow-y-auto bg-zinc-950 border border-zinc-700 rounded p-1 custom-scrollbar">
+            {options.map(opt => {
+                const isSelected = value.includes(opt.value);
+                return (
+                    <div 
+                        key={opt.value} 
+                        onClick={() => handleToggle(opt.value)}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${isSelected ? 'bg-purple-900/20 text-purple-200' : 'hover:bg-zinc-800 text-zinc-400'}`}
+                    >
+                        {isSelected ? <CheckSquare size={14} className="text-purple-500 shrink-0"/> : <Square size={14} className="opacity-50 shrink-0"/>}
+                        <span className="text-xs truncate select-none">{opt.label}</span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 // --- Field Input Component ---
-const FieldInput: React.FC<{ field: SchemaField; value: any; onChange: (val: any) => void; }> = ({ field, value, onChange }) => {
+const FieldInput: React.FC<{ 
+    field: SchemaField; 
+    value: any; 
+    onChange: (val: any) => void;
+    menu?: MenuNode[];
+    activePageId?: string;
+}> = ({ field, value, onChange, menu, activePageId }) => {
   const commonClasses = "w-full bg-zinc-950 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 transition-all";
+
+  // Helper to resolve dynamic options
+  const resolveOptions = () => {
+      if (field.dynamicOptionsSource === 'children' && menu && activePageId) {
+          const findNode = (nodes: MenuNode[]): MenuNode | null => {
+              for (const node of nodes) {
+                  if (node.id === activePageId) return node;
+                  if (node.children) {
+                      const found = findNode(node.children);
+                      if (found) return found;
+                  }
+              }
+              return null;
+          };
+          const currentNode = findNode(menu);
+          if (currentNode && currentNode.children) {
+              return currentNode.children.map(child => ({ label: child.label, value: child.id }));
+          }
+          return [];
+      }
+      // Fallback for static options if provided in a generic way later
+      if (field.options) {
+          return field.options.map(o => ({ label: o, value: o }));
+      }
+      return [];
+  };
 
   switch (field.type) {
     case 'string': return <input type="text" value={value || ''} onChange={(e) => onChange(e.target.value)} className={commonClasses} />;
     case 'number': return <input type="number" value={value || 0} onChange={(e) => onChange(Number(e.target.value))} className={commonClasses} />;
     case 'boolean': return <div className="flex items-center"><input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-purple-600 focus:ring-purple-500 focus:ring-offset-zinc-900" /><span className="ml-2 text-xs text-zinc-400">{field.label}</span></div>;
     case 'select': return <select value={value || ''} onChange={(e) => onChange(e.target.value)} className={commonClasses}>{field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>;
+    case 'multiselect': return <MultiSelectInput options={resolveOptions()} value={value} onChange={onChange} />;
     case 'text': return <textarea rows={3} value={value || ''} onChange={(e) => onChange(e.target.value)} className={`${commonClasses} font-mono`} />;
     case 'richtext': return <RichTextInput value={value} onChange={onChange} />;
     case 'color': return <div className="flex gap-2"><input type="color" value={value || '#000000'} onChange={(e) => onChange(e.target.value)} className="h-8 w-12 bg-transparent border-none p-0 cursor-pointer" /><input type="text" value={value || ''} onChange={(e) => onChange(e.target.value)} className={commonClasses} /></div>;
@@ -348,7 +421,9 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   componentDef, 
   onUpdateProps,
   siteSettings,
-  onUpdateSiteSettings
+  onUpdateSiteSettings,
+  menu,
+  activePageId
 }) => {
 
   if (!selectedBlock) {
@@ -391,6 +466,8 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 field={field} 
                 value={selectedBlock.props[field.name]}
                 onChange={(val) => onUpdateProps(selectedBlock.id, { [field.name]: val })}
+                menu={menu}
+                activePageId={activePageId}
               />
               {field.description && (
                  <p className="text-[10px] text-zinc-600">{field.description}</p>

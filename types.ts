@@ -1,7 +1,7 @@
 
 // --- Schema & Components ---
 
-export type FieldType = 'string' | 'text' | 'number' | 'boolean' | 'select' | 'color' | 'image' | 'richtext';
+export type FieldType = 'string' | 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'color' | 'image' | 'richtext';
 
 export interface SchemaField {
   name: string;
@@ -9,6 +9,7 @@ export interface SchemaField {
   type: FieldType;
   default?: any;
   options?: string[]; // For 'select'
+  dynamicOptionsSource?: 'children'; // New: Instructs PropertyPanel to fetch options dynamically
   description?: string;
 }
 
@@ -47,6 +48,9 @@ export interface Page {
   id: string;
   title: string;
   blocks: Block[];
+  // Metadata for storage
+  _sha?: string; 
+  _path?: string;
 }
 
 export interface MenuNode {
@@ -56,6 +60,8 @@ export interface MenuNode {
   filename?: string; // If page
   collapsed?: boolean;
   children?: MenuNode[];
+  // Path in repository
+  path?: string;
 }
 
 // --- Global Settings (Theme & Brand) ---
@@ -80,9 +86,20 @@ export interface SiteBrand {
   title: string;
 }
 
+export interface GitHubConfig {
+  owner: string;
+  repo: string;
+  branch: string;
+  token: string; // In a real app, use a proxy URL instead of a token
+  pathPrefix: string; // e.g., "content/pages"
+  isProxy?: boolean;
+  proxyUrl?: string;
+}
+
 export interface SiteSettings {
   brand: SiteBrand;
   theme: SiteTheme;
+  github?: GitHubConfig;
 }
 
 // --- Editor State ---

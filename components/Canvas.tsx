@@ -67,7 +67,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [shadow, setShadow] = useState<{col: number, row: number, w: number, h: number} | null>(null);
+  
+  // Shadow now tracks validity
+  const [shadow, setShadow] = useState<{col: number, row: number, w: number, h: number, isValid: boolean} | null>(null);
   
   const [cellSize, setCellSize] = useState(140);
   const [gapSize, setGapSize] = useState(16);
@@ -123,6 +125,25 @@ export const Canvas: React.FC<CanvasProps> = ({
       const rowStart = props[`${prefix}rowStart`];
 
       return { colSpan, rowSpan, colStart, rowStart };
+  };
+
+  // --- Collision Detection ---
+  const checkCollision = (col: number, row: number, w: number, h: number, ignoreId: string) => {
+      return blocks.some(b => {
+          if (b.id === ignoreId) return false;
+          const { colSpan, rowSpan, colStart, rowStart } = getDeviceProps(b.props, viewDevice);
+          
+          // Only collide with fixed blocks to prevent overlapping
+          // If a block is flowing (no fixed start), we assume it will flow around and doesn't "occupy" a fixed slot in a way that blocks us.
+          if (colStart === undefined || rowStart === undefined) return false;
+          
+          return (
+              col < colStart + colSpan &&
+              col + w > colStart &&
+              row < rowStart + rowSpan &&
+              row + h > rowStart
+          );
+      });
   };
 
   // --- Visual Ordering for Auto-Flow ---
@@ -253,8 +274,11 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (col < 1) col = 1;
     if (col > maxCols - w + 1) col = maxCols - w + 1;
     if (row < 1) row = 1;
+
+    // Check collision
+    const isColliding = checkCollision(col, row, w, h, draggedId);
     
-    setShadow({ col, row, w, h });
+    setShadow({ col, row, w, h, isValid: !isColliding });
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -262,11 +286,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     const sourceId = e.dataTransfer.getData('text/plain');
     
     if (shadow && sourceId === draggedId) {
-        const prefix = viewDevice === 'desktop' ? '' : `${viewDevice}_`;
-        onUpdateBlockProps(sourceId, { 
-            [`${prefix}colStart`]: shadow.col, 
-            [`${prefix}rowStart`]: shadow.row 
-        });
+        if (shadow.isValid) {
+            const prefix = viewDevice === 'desktop' ? '' : `${viewDevice}_`;
+            onUpdateBlockProps(sourceId, { 
+                [`${prefix}colStart`]: shadow.col, 
+                [`${prefix}rowStart`]: shadow.row 
+            });
+        }
     }
     
     setDraggedId(null);
@@ -454,7 +480,10 @@ export const Canvas: React.FC<CanvasProps> = ({
               
               {shadow && (
                   <div 
-                     className="border-2 border-dashed border-[var(--primary)] bg-[var(--primary)]/10 rounded-[var(--radius)] z-10 pointer-events-none transition-all duration-75"
+                     className={`
+                        border-2 border-dashed rounded-[var(--radius)] z-10 pointer-events-none transition-all duration-75
+                        ${shadow.isValid ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'border-red-500 bg-red-500/10'}
+                     `}
                      style={{
                          gridColumn: `${shadow.col} / span ${shadow.w}`,
                          gridRow: `${shadow.row} / span ${shadow.h}`

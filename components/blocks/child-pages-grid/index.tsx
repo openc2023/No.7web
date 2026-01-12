@@ -15,11 +15,13 @@ export const ChildPagesGrid: React.FC<any> = ({
     layout, 
     showThumbnail, 
     showDescription,
+    filterIds,
     _context 
 }: { 
     layout: 'grid' | 'list'; 
     showThumbnail: boolean;
     showDescription: boolean;
+    filterIds?: string[];
     _context: Context 
 }) => {
     const { menu, activePageId, onSelectPage } = _context || {};
@@ -37,7 +39,12 @@ export const ChildPagesGrid: React.FC<any> = ({
     };
 
     const currentNode = menu ? findNode(menu, activePageId) : null;
-    const children = currentNode?.children || [];
+    let children = currentNode?.children || [];
+
+    // Filter children if filterIds is provided and not empty
+    if (filterIds && filterIds.length > 0) {
+        children = children.filter(child => filterIds.includes(child.id));
+    }
 
     if (children.length === 0) {
         return (
@@ -51,7 +58,9 @@ export const ChildPagesGrid: React.FC<any> = ({
             >
                 <Folder size={32} className="mb-2 opacity-30"/>
                 <span className="text-xs font-medium">No sub-pages found.</span>
-                <span className="text-[10px] mt-1 opacity-70">Add pages inside "{currentNode?.label}" structure.</span>
+                <span className="text-[10px] mt-1 opacity-70">
+                    {filterIds && filterIds.length > 0 ? "Check your filter selection." : `Add pages inside "${currentNode?.label}" structure.`}
+                </span>
             </div>
         );
     }
@@ -130,6 +139,7 @@ export const ChildPagesGridDef: ComponentDefinition = {
     version: '1.0.0',
     schema: {
         fields: [
+            { name: 'filterIds', label: 'Select Pages', type: 'multiselect', dynamicOptionsSource: 'children', default: [] },
             { name: 'layout', label: 'Layout', type: 'select', options: ['grid', 'list'], default: 'grid' },
             { name: 'showThumbnail', label: 'Show Thumbnail', type: 'boolean', default: true },
             { name: 'showDescription', label: 'Show Desc', type: 'boolean', default: true },

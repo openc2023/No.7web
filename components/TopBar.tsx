@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { Monitor, Tablet, Smartphone, Download, Save, Share2, Box } from 'lucide-react';
+import { Monitor, Tablet, Smartphone, Download, Save, Share2, Box, Github } from 'lucide-react';
 import { Page } from '../types';
 
 interface TopBarProps {
@@ -8,9 +9,19 @@ interface TopBarProps {
   setViewDevice: (d: 'desktop' | 'tablet' | 'mobile') => void;
   onSave: () => void;
   onPublish: () => void;
+  onOpenSettings: () => void;
+  isGitHubConnected: boolean;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ activePage, viewDevice, setViewDevice, onSave, onPublish }) => {
+export const TopBar: React.FC<TopBarProps> = ({ 
+    activePage, 
+    viewDevice, 
+    setViewDevice, 
+    onSave, 
+    onPublish, 
+    onOpenSettings,
+    isGitHubConnected
+}) => {
   return (
     <div className="h-14 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4 select-none shrink-0">
       
@@ -22,7 +33,7 @@ export const TopBar: React.FC<TopBarProps> = ({ activePage, viewDevice, setViewD
         <div>
           <h1 className="text-sm font-semibold text-zinc-100">No.7 Web Studio</h1>
           <div className="text-xs text-zinc-500 flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+            <span className={`w-2 h-2 rounded-full ${isGitHubConnected ? 'bg-green-500' : 'bg-zinc-600'}`}></span>
             {activePage.title}
           </div>
         </div>
@@ -56,11 +67,18 @@ export const TopBar: React.FC<TopBarProps> = ({ activePage, viewDevice, setViewD
       {/* Actions */}
       <div className="flex items-center gap-2 w-72 justify-end">
          <button 
+            onClick={onOpenSettings}
+            className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isGitHubConnected ? 'text-zinc-300 border-zinc-800 hover:bg-zinc-800' : 'text-purple-400 border-purple-500/50 bg-purple-500/10'}`}
+            title="GitHub Settings"
+         >
+            <Github size={14} />
+         </button>
+         <button 
             onClick={onSave}
             className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded transition-colors"
          >
             <Save size={14} />
-            Save Draft
+            Save Cloud
          </button>
          <button 
             onClick={onPublish}

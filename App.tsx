@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Menu, 
   Box, 
@@ -11,15 +11,18 @@ import {
   Tablet,
   Download,
   Save,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { Canvas } from './components/Canvas';
 import { StructureTree } from './components/StructureTree';
 import { ComponentLibrary } from './components/ComponentLibrary';
 import { PropertyPanel } from './components/PropertyPanel';
 import { TopBar } from './components/TopBar';
-import { EditorState, Block, ComponentDefinition, Page, MenuNode, SiteSettings } from './types';
+import { GitHubSettings } from './components/GitHubSettings';
+import { EditorState, Block, ComponentDefinition, Page, MenuNode, SiteSettings, GitHubConfig } from './types';
 import { MOCK_COMPONENTS, MOCK_MENU, DEFAULT_SITE_SETTINGS } from './constants';
+import { GitHubAdapter } from './lib/github-adapter';
 
 const App: React.FC = () => {
   // --- Helpers ---
@@ -30,76 +33,19 @@ const App: React.FC = () => {
   // --- State ---
   const [menu, setMenu] = useState<MenuNode[]>(MOCK_MENU);
   
-  const initialNavLinks = getNavLinksString(MOCK_MENU);
-  
   const [activePageId, setActivePageId] = useState<string>('home');
+  // Pages cache (loaded pages are stored here)
   const [pages, setPages] = useState<Record<string, Page>>({
+    // Keep initial mock data for "Demo Mode" until GitHub connects
     home: {
       id: 'home',
       title: 'Home',
       blocks: [
-        // Header at Top (Default)
         { id: 'h1', type: 'page-header', props: { navLinks: 'Home, Works, About', sticky: true, layoutPosition: 'top' } },
-        
-        // Row 2 (Shifted down so Header can occupy Row 1)
         { id: 'p1', type: 'profile-section', props: { name: 'Yysuni Clone', bio: 'Frontend Developer & UI Designer.', avatar: 'https://github.com/shadcn.png', showSocials: true, colSpan: 6, rowSpan: 4, colStart: 1, rowStart: 2 } },
-        { id: 'l1', type: 'link-card', props: { label: 'Twitter', sublabel: '@yysuni', icon: 'twitter', url: '#', colSpan: 3, rowSpan: 2, colStart: 7, rowStart: 2 } },
-        { id: 'l2', type: 'link-card', props: { label: 'GitHub', sublabel: 'Open Source', icon: 'github', url: '#', colSpan: 3, rowSpan: 2, colStart: 10, rowStart: 2 } },
-        
-        // Row 4
         { id: 'ts1', type: 'tech-stack', props: { title: 'My Stack', items: 'React, Next.js, Tailwind, Node.js, TypeScript, Figma', colSpan: 6, rowSpan: 2, colStart: 7, rowStart: 4 } },
-        
-        // Row 6
         { id: 'b1', type: 'bento-item', props: { title: 'Project Alpha', image: 'https://picsum.photos/600/600', colSpan: 6, rowSpan: 4, colStart: 1, rowStart: 6 } },
-        { id: 'b2', type: 'bento-item', props: { title: 'Photography', image: 'https://picsum.photos/600/400', colSpan: 3, rowSpan: 2, colStart: 7, rowStart: 6 } },
-        { id: 'b3', type: 'bento-item', props: { title: 'Map', image: 'https://picsum.photos/600/402', colSpan: 3, rowSpan: 2, colStart: 10, rowStart: 6 } },
-        { id: 'b4', type: 'bento-item', props: { title: 'Design System', image: 'https://picsum.photos/600/403', colSpan: 6, rowSpan: 2, colStart: 7, rowStart: 8 } },
       ]
-    },
-    projects: {
-      id: 'projects',
-      title: 'Projects',
-      blocks: [
-        { id: 'h2', type: 'page-header', props: { navLinks: initialNavLinks, sticky: true, layoutPosition: 'top' } },
-        
-        // Row 2: Header (Left) + Tech Stack (Right)
-        { id: 'rt1', type: 'rich-text', props: { content: '<h1>My Work</h1><p>Selected projects from 2023-2024.</p>', colSpan: 8, rowSpan: 1, colStart: 1, rowStart: 2 } },
-        { id: 'ts1', type: 'tech-stack', props: { title: 'Expertise', items: 'React, Next.js, TypeScript, Tailwind CSS', colSpan: 4, rowSpan: 2, colStart: 9, rowStart: 2 } },
-        
-        // Row 3: Child Pages Grid (Left) + Link Card (Right)
-        { id: 'cp1', type: 'child-pages-grid', props: { layout: 'grid', showThumbnail: true, showDescription: true, colSpan: 8, rowSpan: 5, colStart: 1, rowStart: 3 } },
-        { id: 'l_proj', type: 'link-card', props: { label: 'Contact Me', sublabel: 'Available for hire', icon: 'mail', url: '#', colSpan: 4, rowSpan: 2, colStart: 9, rowStart: 4 } }
-      ]
-    },
-    'saas-dashboard': {
-        id: 'saas-dashboard',
-        title: 'SaaS Dashboard',
-        blocks: [
-             { id: 'h_sd', type: 'page-header', props: { navLinks: initialNavLinks, sticky: true, layoutPosition: 'top' } },
-             
-             // Content: Split Layout (Text Left, Meta Right)
-             { id: 'rt_sd', type: 'rich-text', props: { content: '<h1>SaaS Dashboard</h1><p>This is a detailed case study about the dashboard project. We focused on high performance data visualization and a clean, accessible user interface.</p><h3>Key Features</h3><ul><li>Real-time analytics</li><li>Role-based access control</li><li>Dark mode support</li></ul>', colSpan: 8, rowSpan: 4, colStart: 1, rowStart: 2 } },
-             
-             { id: 'ts_sd', type: 'tech-stack', props: { title: 'Technologies', items: 'React, Next.js, Supabase, Tailwind', colSpan: 4, rowSpan: 2, colStart: 9, rowStart: 2 } },
-             { id: 'lc_sd', type: 'link-card', props: { label: 'Live Demo', sublabel: 'app.dashboard.com', icon: 'globe', url: '#', colSpan: 4, rowSpan: 2, colStart: 9, rowStart: 4 } },
-
-             // Full Width Image
-             { id: 'bi_sd', type: 'bento-item', props: { title: 'Dashboard Preview', image: 'https://picsum.photos/800/600', colSpan: 12, rowSpan: 5, colStart: 1, rowStart: 6 } }
-        ]
-    },
-    'ecommerce': {
-        id: 'ecommerce',
-        title: 'E-commerce',
-        blocks: [
-             { id: 'h_ec', type: 'page-header', props: { navLinks: initialNavLinks, sticky: true, layoutPosition: 'top' } },
-             
-             { id: 'rt_ec', type: 'rich-text', props: { content: '<h1>E-commerce Platform</h1><p>A full-stack shopping experience built with Next.js. Includes cart functionality, checkout flow, and admin panel.</p>', colSpan: 8, rowSpan: 4, colStart: 1, rowStart: 2 } },
-             
-             { id: 'ts_ec', type: 'tech-stack', props: { title: 'Stack', items: 'Next.js, Stripe, Prisma, PostgreSQL', colSpan: 4, rowSpan: 2, colStart: 9, rowStart: 2 } },
-             { id: 'lc_ec', type: 'link-card', props: { label: 'Source Code', sublabel: 'GitHub', icon: 'github', url: '#', colSpan: 4, rowSpan: 2, colStart: 9, rowStart: 4 } },
-
-             { id: 'bi_ec', type: 'bento-item', props: { title: 'Shop Preview', image: 'https://picsum.photos/800/601', colSpan: 12, rowSpan: 5, colStart: 1, rowStart: 6 } }
-        ]
     }
   });
   
@@ -107,13 +53,108 @@ const App: React.FC = () => {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [viewDevice, setViewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
 
+  // --- GitHub Adapter State ---
+  const [showGitHubSettings, setShowGitHubSettings] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [adapter, setAdapter] = useState<GitHubAdapter | null>(null);
+  const [githubError, setGithubError] = useState<string | null>(null);
+
   // --- Derived State ---
-  const activePage = pages[activePageId] || pages['home'];
+  const activePage = pages[activePageId] || { id: activePageId, title: 'Loading...', blocks: [] };
   const selectedBlock = activePage.blocks.find(b => b.id === selectedBlockId) || null;
   
   const selectedComponentDef = selectedBlock 
     ? MOCK_COMPONENTS.find(c => c.slug === selectedBlock.type) 
     : null;
+
+  // --- GitHub Actions ---
+
+  const handleGitHubConnect = async (config: GitHubConfig) => {
+      setIsLoading(true);
+      setGithubError(null);
+      try {
+          const newAdapter = new GitHubAdapter(config);
+          const menuTree = await newAdapter.loadSiteMap();
+          
+          setAdapter(newAdapter);
+          setMenu(menuTree);
+          setPages({}); // Clear mock cache
+          
+          // Try to load the first page if available
+          if (menuTree.length > 0) {
+             const firstPageId = menuTree[0].id;
+             // Trigger load via handlePageChange (but we need to wait for state, so calling internal loader directly)
+             if (menuTree[0].path) {
+                 const pageData = await newAdapter.loadPage(menuTree[0].path);
+                 setPages({ [firstPageId]: pageData });
+                 setActivePageId(firstPageId);
+             }
+          }
+
+          setShowGitHubSettings(false);
+      } catch (err: any) {
+          console.error(err);
+          setGithubError(err.message || "Failed to connect to GitHub");
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleSavePage = async () => {
+     if (!adapter) {
+         alert("Please connect to GitHub first.");
+         setShowGitHubSettings(true);
+         return;
+     }
+
+     const page = pages[activePageId];
+     if (!page) return;
+
+     setIsLoading(true);
+     try {
+         // Determine path if new
+         let pageToSave = { ...page };
+         if (!pageToSave._path) {
+             // Find path from menu or generate default
+             const findPath = (nodes: MenuNode[]): string | undefined => {
+                 for(const n of nodes) {
+                     if (n.id === page.id) return n.path;
+                     if (n.children) {
+                         const found = findPath(n.children);
+                         if (found) return found;
+                     }
+                 }
+                 return undefined;
+             };
+             const foundPath = findPath(menu);
+             if (foundPath) {
+                 pageToSave._path = foundPath;
+             } else {
+                 // Fallback for root pages
+                 pageToSave._path = `${siteSettings.github?.pathPrefix}/${page.id}.json`;
+             }
+         }
+
+         const result = await adapter.savePage(pageToSave, `Update ${page.title}`);
+         
+         // Update SHA locally
+         setPages(prev => ({
+             ...prev,
+             [activePageId]: {
+                 ...prev[activePageId],
+                 _sha: result.newSha,
+                 _path: pageToSave._path
+             }
+         }));
+
+         alert("Saved successfully to GitHub!");
+     } catch (err: any) {
+         alert(`Error saving: ${err.message}`);
+     } finally {
+         setIsLoading(false);
+     }
+  };
+
 
   // --- Block Actions ---
 
@@ -312,7 +353,7 @@ const App: React.FC = () => {
   const handleAddPage = (title: string) => {
       const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
       if (pages[id]) {
-          alert("Page already exists");
+          alert("Page already exists locally. (Check cached pages)");
           setActivePageId(id);
           return;
       }
@@ -327,7 +368,6 @@ const App: React.FC = () => {
 
       let newMenu = [...menu];
 
-      // Logic: If active page is NOT home, add as child of active page
       if (activePageId && activePageId !== 'home') {
           const addAsChild = (nodes: MenuNode[]): MenuNode[] => {
               return nodes.map(node => {
@@ -346,7 +386,6 @@ const App: React.FC = () => {
           };
           newMenu = addAsChild(newMenu);
       } else {
-          // Add to root
           newMenu.push(newMenuNode);
       }
 
@@ -355,8 +394,6 @@ const App: React.FC = () => {
       const newNavLinks = getNavLinksString(newMenu);
       const now = Date.now();
 
-      // Create new page with a robust default layout (8+4 grid)
-      // This prevents visual issues on desktop where a single block might look unbalanced
       const newPage: Page = {
           id,
           title,
@@ -370,23 +407,12 @@ const App: React.FC = () => {
                       layoutPosition: 'top'
                   } 
               },
-              // Content Area (8 Columns)
               {
                   id: `b_${now + 1}`,
                   type: 'rich-text',
                   props: { 
                       content: `<h1>${title}</h1><p>Start editing...</p>`,
                       colSpan: 8, rowSpan: 3, colStart: 1, rowStart: 2
-                  }
-              },
-              // Sidebar Area (4 Columns) - Adds immediate structure
-              {
-                  id: `s_${now + 2}`,
-                  type: 'tech-stack',
-                  props: { 
-                      title: 'Info', 
-                      items: 'Draft, New Page',
-                      colSpan: 4, rowSpan: 2, colStart: 9, rowStart: 2 
                   }
               }
           ]
@@ -422,9 +448,8 @@ const App: React.FC = () => {
          alert("Cannot delete home page");
          return;
      }
-     if (!window.confirm("Delete this page?")) return;
+     if (!window.confirm("Delete this page? This will only remove it from the menu until you save.")) return;
      
-     // 1. Remove from menu (Immutable)
      const removeNode = (nodes: MenuNode[]): MenuNode[] => {
          return nodes.filter(n => n.id !== pageId).map(n => {
              if (n.children) {
@@ -437,29 +462,52 @@ const App: React.FC = () => {
      setMenu(newMenu);
      syncHeaders(newMenu);
      
-     // 2. Remove from pages
      setPages(prev => {
          const next = { ...prev };
          delete next[pageId];
          return next;
      });
      
-     // 3. Reset active page if needed
      if (activePageId === pageId) setActivePageId('home');
   };
 
   const handleMoveNode = (draggedId: string, targetId: string) => {
     if (draggedId === targetId) return;
 
-    // 1. Find and Remove Dragged Node (Immutable)
+    // --- Circular Dependency Check ---
     let draggedNode: MenuNode | null = null;
+
+    // 1. Find the dragged node first to check its children
+    const findDragged = (nodes: MenuNode[]) => {
+        for(const n of nodes) {
+            if (n.id === draggedId) { draggedNode = n; return; }
+            if (n.children) findDragged(n.children);
+        }
+    };
+    findDragged(menu);
+    
+    // 2. Recursively check if targetId is inside draggedNode's subtree
+    const isDescendant = (parent: MenuNode | null, target: string): boolean => {
+        if (!parent || !parent.children) return false;
+        for (const child of parent.children) {
+            if (child.id === target) return true;
+            if (isDescendant(child, target)) return true;
+        }
+        return false;
+    };
+
+    if (draggedNode && isDescendant(draggedNode, targetId)) {
+        console.warn("Cannot move a node into its own descendant.");
+        return;
+    }
+    // ---------------------------------
 
     const removeNodeRecursive = (nodes: MenuNode[]): MenuNode[] => {
         const result: MenuNode[] = [];
         for (const node of nodes) {
             if (node.id === draggedId) {
-                draggedNode = node;
-                continue; // Skip (remove)
+                // draggedNode is already captured above
+                continue;
             }
             if (node.children) {
                 const newChildren = removeNodeRecursive(node.children);
@@ -479,14 +527,11 @@ const App: React.FC = () => {
     
     if (!draggedNode) return;
 
-    // 2. Insert into Target (Immutable)
     let finalMenu: MenuNode[] = [];
 
     if (targetId === 'root') {
-        // Move to root level
         finalMenu = [...menuWithoutDragged, draggedNode];
     } else {
-        // Insert into specific target node
         const insertNodeRecursive = (nodes: MenuNode[]): MenuNode[] => {
             return nodes.map(node => {
                 if (node.id === targetId) {
@@ -512,22 +557,108 @@ const App: React.FC = () => {
     syncHeaders(finalMenu);
   };
 
-  const handlePageChange = (pageId: string) => {
+  const handlePageChange = async (pageId: string) => {
+    // If we have the page in cache, just switch
     if (pages[pageId]) {
         setActivePageId(pageId);
         setSelectedBlockId(null);
+        return;
+    }
+
+    // Helper to find node in menu
+    const findNode = (nodes: MenuNode[]): MenuNode | null => {
+        for(const n of nodes) {
+            if (n.id === pageId) return n;
+            if (n.children) {
+                const found = findNode(n.children);
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+
+    const node = findNode(menu);
+
+    // If we have an adapter and the node exists with a path, fetch it
+    if (adapter && node && node.path) {
+        setIsLoading(true);
+        try {
+            const pageData = await adapter.loadPage(node.path);
+            setPages(prev => ({ ...prev, [pageId]: pageData }));
+            setActivePageId(pageId);
+            setSelectedBlockId(null);
+        } catch (err) {
+            console.error(err);
+            alert("Failed to load page content.");
+        } finally {
+            setIsLoading(false);
+        }
+        return;
+    }
+
+    // Mock Mode / Fallback: If page exists in menu but not in pages (and no adapter), generate it
+    if (node) {
+         // Create a temporary page entry so we can navigate to it
+         const newPage: Page = {
+             id: pageId,
+             title: node.label,
+             blocks: [
+                 { 
+                    id: `ph_${Date.now()}`, 
+                    type: 'page-header', 
+                    props: { 
+                        navLinks: getNavLinksString(menu), 
+                        sticky: true,
+                        layoutPosition: 'top' 
+                    } 
+                 },
+                 {
+                    id: `txt_${Date.now()}`,
+                    type: 'rich-text',
+                    props: {
+                        content: `<h1>${node.label}</h1><p>Start adding blocks...</p>`
+                    }
+                 }
+             ]
+         };
+         setPages(prev => ({ ...prev, [pageId]: newPage }));
+         setActivePageId(pageId);
+         setSelectedBlockId(null);
+    } else {
+         console.warn("Page not found in menu.");
     }
   };
 
   return (
     <div className="flex flex-col h-screen w-full bg-zinc-950 text-zinc-200 font-sans overflow-hidden">
       
+      {showGitHubSettings && (
+         <GitHubSettings 
+            settings={siteSettings} 
+            onUpdate={setSiteSettings}
+            onConnect={handleGitHubConnect}
+            isConnected={!!adapter}
+            error={githubError}
+         />
+      )}
+
+      {isLoading && (
+          <div className="absolute inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+              <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 flex items-center gap-3 shadow-xl">
+                  <Loader2 className="animate-spin text-purple-500" size={20} />
+                  <span className="text-sm font-medium">Syncing with GitHub...</span>
+              </div>
+          </div>
+      )}
+
       <TopBar 
         activePage={activePage}
         viewDevice={viewDevice}
         setViewDevice={setViewDevice}
-        onSave={() => alert('Saved site.json with current theme and pages.')}
+        onSave={handleSavePage}
         onPublish={() => alert('Exporting static site...')}
+        onOpenSettings={() => setShowGitHubSettings(true)}
+        isGitHubConnected={!!adapter}
       />
 
       <div className="flex flex-1 overflow-hidden relative">
@@ -586,6 +717,9 @@ const App: React.FC = () => {
             onUpdateProps={handleUpdateBlockProps}
             siteSettings={siteSettings}
             onUpdateSiteSettings={setSiteSettings}
+            // Pass global state for dynamic properties
+            menu={menu}
+            activePageId={activePageId}
          />
       </div>
 
