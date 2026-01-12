@@ -1,0 +1,451 @@
+No.7 Web Studio（Builder）开发文档 / Dev Doc
+
+> 目标：保留你现有的三栏编辑器 UI（Structure / Canvas / Components + 底部属性栏），补齐“功能逻辑”：
+> - 组件放进 `components/<slug>/` 文件夹即可自动识别并出现在右侧组件库
+> - 选中组件后，底部属性栏自动根据 schema 生成可编辑项（像 Tina 的 schema/blocks 思路）
+> - 页面多文件管理（左侧结构树切换页面）
+> - 保存/加载/导出静态站（GitHub Pages）
+
+---
+
+## 1. 产品定位与原则
+
+### 1.1 目标用户
+- 普通人写文章、搭页面（像写文档一样）
+- 允许一定的自由排版（布局容器内自由、全局仍保持可响应）
+
+### 1.2 关键原则（参考 Tina 的“schema-driven”思想）
+- **组件=文件夹包**：一个组件就是一个独立目录，包含 manifest + schema + 模板 + 样式
+- **零改代码扩展**：新增组件不改前端 JS，不改 PHP（只要遵守规范）
+- **属性面板自动生成**：底部属性栏按 schema 渲染控件（输入框/颜色/图片/选项等）
+- **内容与结构分离**：页面结构（blocks/props）与最终导出的 HTML 解耦（可分阶段推进）
+
+---
+
+## 2. 总体架构
+
+### 2.1 前端（Admin Builder）
+- UI：TopBar（设备切换/发布）、Left（Structure）、Center（Canvas）、Right（Components）、Bottom（Props）
+- 编辑引擎：GrapesJS（负责拖拽/选中/画布渲染）
+- 状态管理：
+  - `menuData`：站点页面树
+  - `currentPageFile`：当前编辑文件
+  - `selectedComponent`：当前选中 GrapesJS component
+
+### 2.2 后端（PHP API）
+- 负责：
+  - 扫描 `components/` 并返回可用组件清单
+  - 页面读写（多页面）
+  - 站点结构树读写（menu.json）
+  - 导出/发布的基础能力（可选）
+
+---
+
+## 3. 目录结构（推荐）
+
+project-root/
+admin/ # 你的编辑器页面
+index.html
+api/
+get-components.php
+get-menu.php
+save-menu.php
+create-page.php
+get-page.php
+save-page.php
+(optional) export-site.php
+components/ # 组件仓库（核心）
+group-card/
+component.json
+schema.json
+template.html
+style.css
+preview.png # 可选
+README.md # 可选（组件说明）
+content/ # 内容仓库（存结构数据/页面数据）
+menu.json
+pages/
+index.json
+about.json
+pages-source/ # 兼容方案：存 HTML/CSS（你现在的方式）
+index.html
+style.css
+public/ # 静态资源（上传图片、字体等）
+assets/
+dist/ # 导出静态站目录（发布用）
+
+yaml
+코드 복사
+
+> ✅ 如果你想“先跑通”，可以先用 `pages-source/*.html + style.css` 作为保存方式（你现有逻辑）。
+> ✅ 如果你想更像“写文章/可复用组件”，逐步迁移到 `content/pages/*.json`（Blocks JSON）。
+
+---
+
+## 4. 组件系统规范（放文件夹即可识别）
+
+### 4.1 组件目录必须包含
+- `component.json`（必须）
+- `schema.json`（必须：用来生成底部属性面板）
+- `template.html`（必须：用来拖入画布）
+- `style.css`（可选）
+
+### 4.2 component.json（组件元信息）
+**路径**：`components/<slug>/component.json`
+
+```json
+{
+  "name": "Group Card",
+  "slug": "group-card",
+  "category": "Cards",
+  "icon": "fa-id-card",
+  "enabled": true,
+  "version": "0.1.0"
+}
+字段说明：
+
+slug：文件夹名一致（建议）
+
+category：右侧组件库分组
+
+icon：FontAwesome class 后缀（你前端拼 fa-solid ${icon}）
+
+enabled=false：临时下架（不返回给前端）
+
+4.3 template.html（拖入画布的 DOM）
+路径：components/<slug>/template.html
+
+建议规范：
+
+根节点必须带 data-n7 标记，便于识别属于 No.7 组件
+
+必须带 data-n7-type="<slug>"，用于选中时查 schema
+
+props 存在 data-n7-props='{}'（JSON 字符串），属性面板改它
+
+示例：
+
+html
+코드 복사
+<div class="group-card"
+     data-n7="1"
+     data-n7-type="group-card"
+     data-n7-props='{"title":"Group Title","desc":"Description..."}'>
+  <h3 class="title">Group Title</h3>
+  <p class="desc">Description...</p>
+</div>
+4.4 style.css（组件样式）
+路径：components/<slug>/style.css
+
+css
+코드 복사
+.group-card {
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.2);
+}
+.group-card .title { margin: 0 0 8px; font-size: 20px; }
+.group-card .desc { margin: 0; opacity: .85; }
+5. schema.json（属性面板自动生成 —— Tina 思路的核心）
+5.1 schema.json 基本格式
+路径：components/<slug>/schema.json
+
+json
+코드 복사
+{
+  "fields": [
+    { "name": "title", "label": "标题", "type": "string", "default": "Group Title" },
+    { "name": "desc",  "label": "描述", "type": "text",   "default": "" },
+    { "name": "image", "label": "图片", "type": "image" },
+    { "name": "theme", "label": "主题", "type": "select", "options": ["light","dark"], "default": "dark" }
+  ],
+  "bindings": {
+    "title": { "selector": ".title", "mode": "text" },
+    "desc":  { "selector": ".desc",  "mode": "text" },
+    "image": { "selector": "img",    "mode": "attr", "attr": "src" }
+  }
+}
+5.2 字段类型（建议支持的最小集合）
+string：单行文本
+
+text：多行文本
+
+number：数值
+
+boolean：开关
+
+select：下拉选项
+
+color：颜色
+
+image：图片（打开 assets 管理器）
+
+link：链接（url + target）
+
+richtext：富文本（后续集成 TipTap/Lexical；v1 可先当 textarea）
+
+5.3 bindings（从 props 更新 DOM 的规则）
+mode: text：写入 innerText
+
+mode: html：写入 innerHTML
+
+mode: attr：写入某个属性，如 src/href
+
+mode: style：写入 style（如 background-image）
+
+这样你底部属性栏只需要：
+
+读 schema fields 渲染控件
+
+修改 data-n7-props
+
+按 bindings 把 props 同步到 DOM
+
+6. 组件自动识别（后端扫描 components/）
+6.1 API：GET /api/get-components.php
+返回结构（前端 BlockManager 使用）：
+
+json
+코드 복사
+{
+  "status": "success",
+  "components": [
+    {
+      "name": "Group Card",
+      "slug": "group-card",
+      "category": "Cards",
+      "icon": "fa-id-card",
+      "template": "<div ...>...</div>",
+      "style": ".group-card{...}",
+      "schema": { "fields": [...], "bindings": {...} }
+    }
+  ]
+}
+扫描规则建议：
+
+扫描 components/*/component.json
+
+enabled=false 不返回
+
+读取 template.html（必需，空则跳过）
+
+style.css 可选
+
+schema.json 必需（没有则跳过或返回空字段，按你策略）
+
+安全建议：
+
+realpath 校验、防路径穿越
+
+限制文件大小（如 256KB）
+
+忽略隐藏目录、下划线目录
+
+7. 多页面与结构树（menu）
+7.1 menu.json（站点结构树）
+路径：content/menu.json（推荐）
+
+json
+코드 복사
+[
+  {
+    "id": "home",
+    "label": "Home",
+    "filename": "index.json",
+    "collapsed": false,
+    "children": []
+  }
+]
+你的 UI 里允许“文件夹节点”：有 children 就视为 folder。
+
+7.2 API
+GET /api/get-menu.php → 返回 menu
+
+POST /api/save-menu.php → 保存 menu.json
+
+POST /api/create-page.php → 创建物理页面文件（json 或 html）
+
+8. 页面存储（两阶段路线）
+8.1 阶段 A（兼容你现在的方式）：保存 HTML/CSS
+GET /api/get-page.php?file=index.html → 返回 html + css
+
+POST /api/save-page.php → 写入 pages-source/<file>.html 和 pages-source/style.css（或 per-page css）
+
+优点：最快闭环
+缺点：组件 props/复用/文章式编辑难以系统化
+
+8.2 阶段 B（推荐终态）：保存 Blocks JSON（像 Tina）
+页面文件：content/pages/index.json
+
+Canvas 渲染：JSON → 组件 renderer → DOM
+
+导出静态：JSON → SSR/静态生成 → dist
+
+页面 JSON 示例：
+
+json
+코드 복사
+{
+  "title": "Home",
+  "blocks": [
+    { "id": "b1", "type": "richtext", "props": { "content": "..." } },
+    { "id": "b2", "type": "group-card", "props": { "title": "A", "desc": "B" } }
+  ]
+}
+迁移建议：先让每个组件实例在 DOM 上带 data-n7-props，保存时把 DOM 提取成 blocks JSON（v2 做）。
+
+9. 属性面板自动生成（核心功能逻辑）
+9.1 选中组件时
+从 GrapesJS 取得 selected element
+
+读取 data-n7-type → slug
+
+从组件缓存表（get-components 返回）拿到该 slug 的 schema
+
+渲染字段控件（fields）
+
+把控件值写入 data-n7-props（JSON string）
+
+按 bindings 同步到 DOM（标题、图片 src 等）
+
+9.2 “像写文章一样”的 RichText
+建议把 RichText 作为一个标准组件类型：
+
+type: richtext
+
+props：content
+
+v1：用 textarea + contentEditable 过渡
+
+v2：接入 TipTap/Lexical，content 存 JSON
+
+10. 导出静态站（Export / Publish）
+10.1 最小可用（v1）
+读取每个页面（html/css 或 json 渲染成 html）
+
+写入 dist/<page>.html
+
+复制 public/assets 到 dist/assets
+
+生成 dist/index.html（入口）
+
+10.2 GitHub Pages 发布（两种方式）
+手动：导出 zip → 用户自己上传/推送
+
+自动：提供一个“生成 dist + git commit/push”的脚本（需要 token，注意安全）
+
+11. 社区组件贡献（开源/社区模式）
+11.1 贡献方式
+新增 components/<slug>/ 文件夹
+
+提交包含：
+
+component.json
+
+schema.json
+
+template.html
+
+（可选）style.css / preview.png
+
+提交 PR
+
+11.2 CI 校验（建议后续补）
+检查必需文件存在
+
+schema.json 是否可解析
+
+template.html 是否包含 data-n7-type
+
+文件大小限制
+
+12. 开发里程碑（推荐顺序）
+M0（你现在已有）
+GrapesJS 初始化、BlockManager 自定义渲染、Structure 树切页、保存按钮入口
+
+M1（必须补齐）
+✅ get-components.php：扫描组件目录 + 返回 template/style/schema
+
+✅ 前端：组件缓存表（slug → schema）
+
+✅ 选中组件：自动生成属性面板（按 schema）
+
+M2（文章体验）
+RichText 组件（段落/标题/链接/图片）
+
+快捷键与块级编辑体验（/ 菜单、拖动手柄）
+
+M3（数据化与生态）
+页面存储迁移为 blocks JSON
+
+导出静态：JSON → HTML
+
+社区贡献 + CI 校验
+
+13. 约定与注意事项
+组件模板必须“自描述”：data-n7-type + data-n7-props
+
+props 永远是真相来源：DOM 只是渲染结果
+
+避免全局 absolute：自由排版建议局部容器（Grid/Columns/Freeform Frame）
+
+安全：后端读写必须做 realpath 校验、防路径穿越、限制文件大小
+
+14. 附：组件最小模板（复制即可用）
+pgsql
+코드 복사
+components/group-card/
+  component.json
+  schema.json
+  template.html
+  style.css
+component.json
+
+json
+코드 복사
+{ "name":"Group Card","slug":"group-card","category":"Cards","icon":"fa-id-card","enabled":true }
+schema.json
+
+json
+코드 복사
+{
+  "fields": [
+    { "name":"title","label":"标题","type":"string","default":"Group Title" },
+    { "name":"desc","label":"描述","type":"text","default":"Description..." }
+  ],
+  "bindings": {
+    "title": { "selector": ".title", "mode": "text" },
+    "desc":  { "selector": ".desc",  "mode": "text" }
+  }
+}
+template.html
+
+html
+코드 복사
+<div class="group-card" data-n7="1" data-n7-type="group-card"
+     data-n7-props='{"title":"Group Title","desc":"Description..."}'>
+  <h3 class="title">Group Title</h3>
+  <p class="desc">Description...</p>
+</div>
+style.css
+
+css
+코드 복사
+.group-card{padding:20px;border-radius:12px;border:1px solid rgba(0,0,0,.12)}
+下一步你要做的最关键一件事：
+把 get-components.php 做成“扫描目录返回 template + style + schema”，
+然后前端在 component:selected 时按 schema 渲染属性面板并写回 data-n7-props。
+
+pgsql
+코드 복사
+
+如果你愿意，我下一条就可以按这份文档把 **M1 的两段代码**直接给你：
+1) `api/get-components.php`（完整安全扫描版，返回 schema）
+2) 前端：`initSelectionListener` 改成“按 schema 自动生成属性面板 + bindings 写回 DOM”
+::contentReference[oaicite:0]{index=0}
+
+
+
+
+
+

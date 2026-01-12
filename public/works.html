@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>No.7 Studio · 作品展示</title>
+    <meta name="description" content="查看 No.7 Studio 的网站模板与作品展示。">
+    <style>
+        :root {
+            color-scheme: light;
+            --primary: #2f6fed;
+            --primary-dark: #244fbe;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --surface: #ffffff;
+            --surface-alt: #f8fafc;
+            --line: #e5e7eb;
+            --shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--surface-alt);
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(18px);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .nav-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 0;
+        }
+
+        .navbar-logo {
+            color: var(--text);
+            text-decoration: none;
+            font-size: 1.4rem;
+            font-weight: bold;
+        }
+
+        .navbar-menu {
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .navbar-link {
+            color: var(--text);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 999px;
+        }
+
+        .navbar-link:hover,
+        .navbar-link.is-active {
+            background-color: rgba(47, 111, 237, 0.12);
+            color: var(--primary);
+        }
+
+        .hero {
+            padding: 52px 0 24px;
+        }
+
+        .hero h1 {
+            font-size: 2.4rem;
+            margin-bottom: 12px;
+        }
+
+        .hero p {
+            color: var(--muted);
+            max-width: 640px;
+        }
+
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 28px 0;
+        }
+
+        .filter {
+            padding: 8px 16px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--text);
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .filter.is-active {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(47, 111, 237, 0.08);
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+            padding-bottom: 48px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+        }
+
+        .card-cover {
+            height: 180px;
+            background: linear-gradient(135deg, rgba(47, 111, 237, 0.2), rgba(251, 146, 60, 0.25));
+        }
+
+        .card-body {
+            padding: 18px;
+        }
+
+        .card-body span {
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .footer {
+            background: #0f172a;
+            color: #e2e8f0;
+            text-align: center;
+            padding: 2.5rem 0;
+        }
+
+        .footer small {
+            display: block;
+            color: #94a3b8;
+            margin-top: 6px;
+        }
+
+        @media (max-width: 900px) {
+            .nav-inner {
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container nav-inner">
+            <a class="navbar-logo" href="index.html">No.7 Studio</a>
+            <ul class="navbar-menu">
+                <li><a class="navbar-link" href="index.html">首页</a></li>
+                <li><a class="navbar-link is-active" href="works.html">作品</a></li>
+                <li><a class="navbar-link" href="index.html#features">功能</a></li>
+                <li><a class="navbar-link" href="index.html#contact">联系</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="hero">
+            <h1>作品与模板展示</h1>
+            <p>这里汇总了为摄影师、设计师、品牌工作室打造的页面模板。你可以直接在编辑器中复用这些结构。</p>
+            <div class="filters">
+                <a class="filter is-active" href="#">全部</a>
+                <a class="filter" href="#">个人作品</a>
+                <a class="filter" href="#">品牌官网</a>
+                <a class="filter" href="#">服务展示</a>
+            </div>
+        </section>
+
+        <section class="gallery">
+            <article class="card">
+                <div class="card-cover"></div>
+                <div class="card-body">
+                    <h3>摄影师叙事集</h3>
+                    <span>全屏视觉 + 作品时间线</span>
+                </div>
+            </article>
+            <article class="card">
+                <div class="card-cover"></div>
+                <div class="card-body">
+                    <h3>设计顾问主页</h3>
+                    <span>项目展示 + 服务流程</span>
+                </div>
+            </article>
+            <article class="card">
+                <div class="card-cover"></div>
+                <div class="card-body">
+                    <h3>工作室品牌站</h3>
+                    <span>团队介绍 + 合作伙伴</span>
+                </div>
+            </article>
+            <article class="card">
+                <div class="card-cover"></div>
+                <div class="card-body">
+                    <h3>课程发布页</h3>
+                    <span>课程亮点 + 立即报名</span>
+                </div>
+            </article>
+            <article class="card">
+                <div class="card-cover"></div>
+                <div class="card-body">
+                    <h3>生活方式博客</h3>
+                    <span>图文排版 + 订阅入口</span>
+                </div>
+            </article>
+            <article class="card">
+                <div class="card-cover"></div>
+                <div class="card-body">
+                    <h3>产品发布页</h3>
+                    <span>核心卖点 + 价格方案</span>
+                </div>
+            </article>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 No.7 Studio. Built with No.7 Studio.</p>
+            <small>用模板加速灵感落地。</small>
+        </div>
+    </footer>
+</body>
+</html>

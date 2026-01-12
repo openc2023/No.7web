@@ -1,0 +1,136 @@
+<div class="comp-group-card-wrapper">
+    <style>
+        /* --- 样式隔离 --- */
+        .comp-group-card-wrapper {
+            /* 1. 外层背景容器 (与万能卡片一致) */
+            --bg-image: var(--global-bg-image); /* 继承全局背景图片 */
+            --padding-y: 60px;
+            --padding-x: 20px;
+            
+            background-image: var(--bg-image);
+            background-size: cover;
+            background-position: center;
+            padding: var(--padding-y) var(--padding-x);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* 组卡片通常比较高，所以顶对齐 */
+            min-height: 500px;
+            position: relative;
+        }
+
+        /* 背景遮罩 */
+        .comp-group-card-wrapper::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,var(--global-overlay-opacity)); /* 使用全局遮罩浓度 */
+            z-index: 0;
+        }
+
+        .group-glass-container {
+            /* --- 2. 容器外观属性 (统一变量系统) --- */
+            /* 优先使用局部变量，局部变量未定义时使用全局变量 */
+            --container-width: 1000px; /* 默认宽一点，好放东西 */
+            --blur: var(--local-blur, var(--global-blur)); /* 磨砂强度 */
+            --radius: var(--local-radius, var(--global-radius)); /* 圆角 */
+            --bg-color: var(--local-bg-color, var(--global-bg-color)); /* 底色RGB */
+            --bg-opacity: var(--local-bg-opacity, var(--global-bg-opacity)); /* 透明度 */
+            --border-color: var(--local-border-color, var(--global-border-color)); /* 边框颜色 */
+            --border-width: var(--local-border-width, var(--global-border-width)); /* 边框宽度 */
+            --shadow: var(--local-shadow, var(--global-shadow)); /* 阴影 */
+            --text-color: var(--local-text-color, var(--global-text-color)); /* 文字颜色 */
+            --accent-color: var(--local-accent-color, var(--global-accent-color)); /* 强调色 */
+            
+            /* --- 3. 核心布局属性 (Grid Layout) --- */
+            --grid-columns: 2;   /* 一行放几个？(可以改成 1, 3, 4) */
+            --grid-gap: 20px;    /* 卡片之间的间距 */
+            
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: var(--container-width);
+            
+            background: rgba(var(--bg-color), var(--bg-opacity));
+            backdrop-filter: blur(var(--blur));
+            -webkit-backdrop-filter: blur(var(--blur));
+            
+            border: var(--border-width) solid var(--border-color);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            
+            overflow: hidden;
+            transition: all 0.3s ease;
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+        }
+
+        .group-header {
+            padding: 15px 25px;
+            background: rgba(0,0,0,0.2);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .group-title {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            opacity: 0.9;
+        }
+
+        /* 核心网格区域 */
+        .group-grid-body {
+            padding: 25px;
+            
+            /* Grid 魔法 */
+            display: grid;
+            /* 自动均分列 */
+            grid-template-columns: repeat(var(--grid-columns), 1fr);
+            gap: var(--grid-gap);
+            
+            /* 最小高度，方便拖拽 */
+            min-height: 200px; 
+        }
+
+        /* 移动端适配：手机上强制单列 */
+        @media (max-width: 768px) {
+            .group-grid-body {
+                grid-template-columns: 1fr !important;
+            }
+        }
+    </style>
+
+    <div class="group-glass-container">
+        
+        <div class="group-header">
+            <span class="group-title" data-gjs-editable="true">My Component Collection</span>
+            <div style="display:flex; gap:6px; opacity:0.5;">
+                <div style="width:8px; height:8px; border-radius:50%; background:white;"></div>
+                <div style="width:8px; height:8px; border-radius:50%; background:white;"></div>
+            </div>
+        </div>
+
+        <div class="group-grid-body" data-gjs-droppable="true">
+            
+            <div style="
+                border: 2px dashed rgba(255,255,255,0.2); 
+                border-radius: 12px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                min-height: 150px; 
+                color: rgba(255,255,255,0.4);
+                grid-column: 1 / -1; /* 占满整行 */
+            ">
+                <div style="text-align:center;">
+                    <i class="fa-solid fa-plus" style="font-size: 24px; margin-bottom: 10px;"></i>
+                    <br>Drag other cards here
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>

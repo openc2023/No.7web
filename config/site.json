@@ -1,0 +1,20 @@
+{
+    "global": {
+        "title": "No.7 Website",
+        "description": "Built with Project No.7"
+    },
+    "menu": [
+        {
+            "id": "m1",
+            "label": "首页",
+            "url": "index.html",
+            "children": []
+        },
+        {
+            "id": "m2",
+            "label": "作品",
+            "url": "works.html",
+            "children": []
+        }
+    ]
+}
